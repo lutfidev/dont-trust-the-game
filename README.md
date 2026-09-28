@@ -1,17 +1,39 @@
-# dont_trust_the_game
+# Don't Trust The Game
 
-A new Flutter project.
+A mobile 2D psychological puzzle in an isometric room, built with Flutter + Flame
+from a Claude Design handoff (`Dont Trust The Game.dc.html`).
 
-## Getting Started
+```sh
+flutter pub get
+flutter run                              # menu → boot → stage 01
+flutter run --dart-define=START_STAGE=3  # jump to a stage (1–4) for testing
+flutter test
+```
 
-This project is a starting point for a Flutter application.
+## Structure
 
-A few resources to get you started if this is your first Flutter project:
+| Path | What |
+| --- | --- |
+| `lib/room/` | The Flame world: 2:1 iso projection (`iso.dart`), the mutable `RoomScene`, and `RoomGame` — flat polygons, 3 tones per object, priority-sorted pieces, and the glitch layer (red ghost ±3px + offset horizontal slices). |
+| `lib/game/game_controller.dart` | The story state machine (01 TRUST → 05 TRUTH, 3 endings) on a pause-aware clock: typing, walking (170ms/tile, BFS), scheduled beats and idle comments all freeze while paused. |
+| `lib/game/overlays.dart` | Flutter overlays over the `GameWidget`: HUD, terminal, pause, drawer puzzle, log, truth choice, endings. |
+| `lib/screens/` | Main menu, boot/intro, gameplay, settings. |
+| `lib/widgets/common.dart` | `DesignFrame` (lays out on the design's 360-wide canvas and scales to the device), bracket buttons, blinking cursor, scanlines. |
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Flow
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. **TRUST** — "MOVE RIGHT." → "OPEN THE DOOR." → "IT'S LOCKED."
+2. **FIRST LIE** — "THE KEY IS IN THE DRAWER." The drawer puzzle says the code is 1-2-3-4; the real code (4·0·7·1) is scratched on the wall. The drawer is empty → "I LIED." → "DON'T GO THERE." (the key is there).
+3. **UI GLITCH** — pause becomes `[ TRUST ME ]`, HUD swaps sides, MOVE → OBEY, room slices + red ghost.
+4. **WATCHING** — back in room 01. The game comments on idling (7s), always going left, and pause count. A crack appears in the wall.
+5. **TRUTH** — the secret room. Trust → loop to start; Don't trust → exit; Do nothing (or wait 12s) → true ending.
+
+## Differences from the prototype
+
+- The drawer puzzle and the `[ CONTINUE ] / [ LOG ]` dialogue step, shown as separate static screens in the design, are both part of stage 02 here.
+- The scratched code sits left of the door, as `4·0·7·1`. In the prototype the door covered the "7".
+- The secret-room wall lines are re-spaced and the left-wall lines wrapped, so they no longer overlap each other or the opening.
+- IBM Plex Mono has no ▸ ▲ ▼ glyphs, so they are drawn as small triangles.
+- Music/SFX levels are stored but no audio is wired yet (there are no audio assets). Vibration is used for the lie and for flashes; screen shake applies to flashes.
+
+Fonts: IBM Plex Mono and Instrument Serif (SIL OFL, `assets/fonts/OFL.txt`).
