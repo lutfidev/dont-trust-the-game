@@ -26,16 +26,27 @@ class Hud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stage = forceTrust ? 1 : g.stage;
+    final fx = g.glitch;
     final lying = stage >= 3;
-    final dot = lying ? C.warn : C.safe;
-    final label = StageLabel(_labels[stage] ?? '', dot, dotAfter: stage == 3);
+    // Between bursts the HUD is what the design shows; during a burst the
+    // game briefly lets its "real" labels slip through.
+    final dot = lying || (stage == 2 && fx.bursting) ? C.warn : C.safe;
+    final labelText = switch (stage) {
+      3 => fx.flicker(_labels[3]!, '03 / UI GLITCH', k: 1),
+      4 => fx.flicker(_labels[4]!, '04 / I SEE YOU', k: 1, chance: .45),
+      _ => _labels[stage] ?? '',
+    };
+    final label = StageLabel(labelText, dot, dotAfter: stage == 3);
     final VoidCallback? onTap =
         forceTrust ? null : (g.paused ? g.resume : g.pause);
     final text = g.paused && !forceTrust
         ? '[ ▸ ]'
-        : lying
-            ? '[ TRUST ME ]'
-            : '[ II ]';
+        : switch (stage) {
+            2 => fx.flicker('[ II ]', '[ TRUST ME ]', k: 2, chance: .8),
+            3 => fx.flicker('[ TRUST ME ]', '[ II ]', k: 2, chance: .5),
+            4 => fx.flicker('[ TRUST ME ]', '[ WATCHING ]', k: 2, chance: .5),
+            _ => '[ II ]',
+          };
 
     if (stage == 3) {
       // The HUD swaps sides and the pause button leans off its grid.
@@ -86,8 +97,15 @@ class Terminal extends StatelessWidget {
         ? g.log.sublist(math.max(0, g.log.length - 4), g.log.length - 1)
         : const <LogLine>[];
 
+    final fx = g.glitch;
     var lineNo = 'L.${(g.lineCount + g.stage * 7).toString().padLeft(3, '0')}';
     if (glitch) lineNo = '${lineNo.substring(0, 3)}?${lineNo.substring(4)}';
+    lineNo = fx.scramble(lineNo, amount: .4);
+    final header = switch (g.stage) {
+      3 => fx.flicker('SYST3M', 'SYSTEM', k: 3),
+      4 => fx.flicker('SYSTEM', 'SYST3M', k: 3),
+      _ => 'SYSTEM',
+    };
 
     return Container(
       height: dialogue ? 330 : 270,
@@ -114,7 +132,7 @@ class Terminal extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(glitch ? 'SYST3M' : 'SYSTEM',
+                  Text(header,
                       style: mono(10,
                           tracking: .24,
                           color: cur.kind == LineKind.lie ? C.warn : C.muted)),
@@ -180,7 +198,9 @@ class _CurrentLine extends StatelessWidget {
     final size = voice ? 28.0 : lie ? 30.0 : 20.0;
     final color = Terminal._colors[cur.kind]!;
     final prefix = voice ? '' : '> ';
-    final shown = prefix + cur.text.substring(0, g.typed);
+    var shown = prefix + cur.text.substring(0, g.typed);
+    // Instructions tear apart for a moment during a burst (never the voice).
+    if (g.stage >= 3 && !voice) shown = g.glitch.scramble(shown, amount: .1);
     final style = voice
         ? serif(size, color: color, height: 1.2)
         : mono(size,
@@ -236,14 +256,22 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fx = g.glitch;
     final obey = g.stage >= 3;
-    final hint = Text.rich(
-      TextSpan(children: [
-        const TextSpan(text: 'TAP A TILE TO '),
-        TextSpan(text: obey ? 'OBEY' : 'MOVE', style: TextStyle(color: obey ? C.warn : C.muted)),
-      ]),
-      style: mono(10, color: C.muted, tracking: .18),
-    );
+    final verb = obey ? fx.flicker('OBEY', 'MOVE', k: 5, chance: .5) : 'MOVE';
+    final watching = g.stage == 4 &&
+        fx.flicker('', 'x', k: 6, chance: .35).isNotEmpty;
+    final hint = watching
+        ? Text("I KNOW WHERE YOU'LL TAP", style: mono(10, color: C.warn, tracking: .18))
+        : Text.rich(
+            TextSpan(children: [
+              const TextSpan(text: 'TAP A TILE TO '),
+              TextSpan(
+                  text: verb,
+                  style: TextStyle(color: verb == 'OBEY' ? C.warn : C.muted)),
+            ]),
+            style: mono(10, color: C.muted, tracking: .18),
+          );
     final slots = Row(mainAxisSize: MainAxisSize.min, children: [
       Container(
         width: 40,
