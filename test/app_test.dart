@@ -46,5 +46,10 @@ void main() {
     await tester.tap(find.text('FAST'));
     await tester.pump();
     expect(settings.speed, TextSpeed.fast);
+
+    expect(find.text('REDUCE GLITCH'), findsOneWidget);
+    await tester.tap(find.text('[ OFF ]').last); // last toggle row
+    await tester.pump();
+    expect(settings.reduceGlitch, isTrue);
   });
 }

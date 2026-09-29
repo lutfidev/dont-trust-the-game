@@ -29,7 +29,9 @@ class TransitionOverlay extends StatelessWidget {
           valueListenable: g.transitionClock,
           builder: (context, ms, _) {
             final light = t.kind == TransitionKind.light;
-            final hold = ms >= t.coverMs && ms < t.totalMs - (light ? 500 : 300);
+            final reduced = g.glitch.reduced;
+            final hold = ms >= t.coverMs &&
+                ms < t.totalMs - (reduced || light ? _FadePainter.fadeOutMs : 300);
             final typedMs = ms - t.coverMs - 120;
             final chars = typedMs <= 0 ? 0 : math.min(t.card.length, typedMs ~/ 30);
             final ink = light ? C.void_ : C.ink;
@@ -38,9 +40,11 @@ class TransitionOverlay extends StatelessWidget {
               onTap: () {},
               child: CustomPaint(
                 size: Size.infinite,
-                painter: light
-                    ? _LightPainter(t, ms, t.origin.translate(0, roomTop))
-                    : _TearPainter(t, ms),
+                painter: reduced
+                    ? _FadePainter(t, ms, light ? C.ink : const Color(0xFF050506))
+                    : light
+                        ? _LightPainter(t, ms, t.origin.translate(0, roomTop))
+                        : _TearPainter(t, ms),
                 child: Center(
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 120),
@@ -64,6 +68,30 @@ class TransitionOverlay extends StatelessWidget {
 }
 
 double _ease(double x) => Curves.easeInOutCubic.transform(x.clamp(0.0, 1.0));
+
+/// Reduce-glitch version: a plain eased fade in, hold, fade out.
+class _FadePainter extends CustomPainter {
+  _FadePainter(this.t, this.ms, this.color);
+  final StageTransition t;
+  final int ms;
+  final Color color;
+
+  static const fadeOutMs = 500;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final out = t.totalMs - fadeOutMs;
+    final a = ms < t.coverMs
+        ? _ease(ms / t.coverMs)
+        : ms < out
+            ? 1.0
+            : 1 - _ease((ms - out) / fadeOutMs);
+    canvas.drawRect(Offset.zero & size, Paint()..color = color.withValues(alpha: a));
+  }
+
+  @override
+  bool shouldRepaint(_FadePainter old) => old.ms != ms;
+}
 
 class _TearPainter extends CustomPainter {
   _TearPainter(this.t, this.ms);

@@ -66,6 +66,9 @@ class GameController extends ChangeNotifier {
   final RoomScene scene = RoomScene();
   final GlitchDirector glitch;
 
+  /// The OS "remove animations / reduce motion" setting, set by the screen.
+  bool systemReduceMotion = false;
+
   /// The running stage transition; drives its overlay every frame.
   final ValueNotifier<StageTransition?> transition = ValueNotifier(null);
 
@@ -290,6 +293,7 @@ class GameController extends ChangeNotifier {
       changed |= due.isNotEmpty;
     }
 
+    glitch.reduced = settings.reduceGlitch || systemReduceMotion;
     if (glitch.tick(ms)) changed = true;
 
     final tr = transition.value;
@@ -338,6 +342,7 @@ class GameController extends ChangeNotifier {
   /// visible, then reveals it. [afterReveal] runs once the screen is clear.
   void _transition(StageTransition t,
       {required VoidCallback onCovered, VoidCallback? afterReveal}) {
+    glitch.reduced = settings.reduceGlitch || systemReduceMotion;
     transition.value = t;
     transitionClock.value = 0;
     glitch.burst(ms: t.coverMs, heavy: t.kind == TransitionKind.tear);

@@ -47,6 +47,12 @@ flutter test
   (`[ II ]`↔`[ TRUST ME ]`, `04 / I SEE YOU`, `I KNOW WHERE YOU'LL TAP`) and a
   few characters of the instruction are scrambled. Between bursts 03–04 look
   exactly like the design. Pausing freezes it.
+- **REDUCE GLITCH** (Settings, off by default): no bursts (no flicker,
+  jitter, label swaps or scrambling), and transitions become a plain fade
+  with the same stage card. The steady 03–04 look from the design stays. It
+  also switches on automatically when the OS "remove animations / reduce
+  motion" accessibility setting is on. Unlike "LET THE GAME HELP YOU", the
+  game never overrides it.
 - **Stage transitions** (`lib/game/transition_overlay.dart`) replace the white
   flash. There are two kinds:
   - black bands tear shut for 02 → 03;
