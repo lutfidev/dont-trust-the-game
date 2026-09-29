@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:dont_trust_the_game/game/game_controller.dart';
+import 'package:dont_trust_the_game/game/glitch.dart';
 import 'package:dont_trust_the_game/room/room_scene.dart';
 import 'package:dont_trust_the_game/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,8 +31,9 @@ void main() {
   });
 
   test('full playthrough reaches all three endings', () {
-    final g = GameController(settings);
+    final g = GameController(settings, random: math.Random(1));
     expect(g.stage, 1);
+    expect(g.glitch.unease, Unease.none);
     expect(g.current.text, 'MOVE RIGHT.');
 
     // 01 TRUST — follow the instruction.
@@ -55,6 +59,7 @@ void main() {
     expect(g.scene.drawerOpen, isTrue);
     expect(g.current.kind, LineKind.lie);
     expect(g.continuePrompt, isTrue);
+    expect(g.glitch.unease, Unease.hint);
     g.onContinue();
     expect(g.current.text, "DON'T GO THERE.");
 
@@ -63,7 +68,7 @@ void main() {
     run(g, 4000);
     expect(g.stage, 3);
     expect(g.hasKey, isTrue);
-    expect(g.scene.glitch, 1);
+    expect(g.glitch.unease, Unease.broken);
 
     // 03 UI GLITCH — open and go through the door.
     g.onDoor();
@@ -74,6 +79,8 @@ void main() {
 
     // 04 WATCHING — idle comment, pause counter.
     expect(g.stage, 4);
+    expect(g.transition.value, isNull);
+    expect(g.glitch.unease, Unease.watching);
     expect(g.scene.crack, isTrue);
     run(g, GameController.idleCommentMs + 500);
     expect(g.current.text, 'Why are you not moving?');
@@ -84,8 +91,9 @@ void main() {
 
     // 05 TRUTH — through the crack.
     g.onCrack();
-    run(g, 4000);
+    run(g, 5000);
     expect(g.stage, 5);
+    expect(g.glitch.unease, Unease.none);
     expect(g.overlay, GameOverlay.truth);
     expect(g.scene.wallText, truthWallText);
 
@@ -98,7 +106,7 @@ void main() {
   test('trusting the game loops back to room 01', () {
     final g = GameController(settings, startStage: 4);
     g.onCrack();
-    run(g, 4000);
+    run(g, 5000);
     g.choose(GameOverlay.endTrust);
     expect(g.overlay, GameOverlay.endTrust);
     run(g, GameController.trustLoopMs + 100);
@@ -123,5 +131,51 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 800));
     expect(settings.assist, isTrue);
     expect(settings.assistMessage, 'NO.');
+  });
+
+  test('stage changes happen while the transition covers the screen', () {
+    final g = GameController(settings, startStage: 3, random: math.Random(2));
+    g.onDoor();
+    run(g, 1500);
+    g.onDoor(); // go through
+    run(g, 700); // walk (0 tiles) + light cover
+    final t = g.transition.value!;
+    expect(t.kind, TransitionKind.light);
+    expect(t.card, '04 / WATCHING');
+    expect(g.stage, 4, reason: 'swapped under cover');
+    expect(g.busy, isTrue);
+    expect(g.canPause, isFalse);
+    run(g, t.totalMs);
+    expect(g.transition.value, isNull);
+    expect(g.current.text, 'WELCOME BACK TO ROOM 01.');
+  });
+
+  test('glitch bursts only where the story allows them', () {
+    final d = GlitchDirector(math.Random(3));
+    var bursts = 0;
+    void runFor(int ms) {
+      var was = false;
+      for (var t = 0; t < ms; t += 16) {
+        d.tick(16);
+        if (d.bursting && !was) bursts++;
+        was = d.bursting;
+      }
+    }
+
+    d.unease = Unease.none;
+    runFor(20000);
+    expect(bursts, 0);
+    expect(d.fx.active, isFalse);
+
+    d.unease = Unease.broken;
+    expect(d.fx.slices, isNotEmpty, reason: 'steady slices between bursts');
+    runFor(20000);
+    expect(bursts, greaterThanOrEqualTo(4));
+
+    // Labels only change mid-burst.
+    d.unease = Unease.none;
+    expect(d.flicker('A', 'B'), 'A');
+    d.burst(ms: 100);
+    expect(d.scramble('OPEN THE DOOR.'), hasLength(14));
   });
 }

@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../room/character.dart';
+import '../room/iso.dart';
 import '../room/room_scene.dart';
 import '../settings.dart';
 import '../theme.dart';
+import 'glitch.dart';
 
 enum LineKind { sys, cmd, lie, ok, voice }
 
@@ -27,17 +31,46 @@ enum GameOverlay { none, puzzle, log, truth, endTrust, endDont, endTrue }
 
 enum PuzzleStatus { idle, wrong, lied, open }
 
+/// How a stage change is covered: a black glitch tear, or light flooding in
+/// from a point in the room (the door, the crack).
+enum TransitionKind { tear, light }
+
+class StageTransition {
+  StageTransition(this.kind, this.card, {this.origin = Offset.zero});
+  final TransitionKind kind;
+
+  /// Stage card shown while the screen is covered, e.g. "03 / UI GL1TCH".
+  final String card;
+
+  /// Where the light comes from, in room-canvas coordinates.
+  final Offset origin;
+  int elapsed = 0;
+
+  int get coverMs => kind == TransitionKind.tear ? 380 : 450;
+  int get totalMs => kind == TransitionKind.tear ? 1550 : 1700;
+  int get revealMs => totalMs - coverMs;
+}
+
 /// The whole story as a state machine: stages 01 TRUST → 05 TRUTH.
 ///
 /// All timing runs through [tick] on a pause-aware clock, so scheduled beats,
 /// typing and walking freeze while the pause menu is open.
 class GameController extends ChangeNotifier {
-  GameController(this.settings, {int startStage = 1}) {
+  GameController(this.settings, {int startStage = 1, math.Random? random})
+      : glitch = GlitchDirector(random) {
+    scene.fx = glitch.fx;
     _reset(startStage);
   }
 
   final SettingsStore settings;
   final RoomScene scene = RoomScene();
+  final GlitchDirector glitch;
+
+  /// The running stage transition; drives its overlay every frame.
+  final ValueNotifier<StageTransition?> transition = ValueNotifier(null);
+
+  /// Elapsed ms of [transition]; ticks every frame so only its overlay rebuilds.
+  final ValueNotifier<int> transitionClock = ValueNotifier(0);
 
   static const walkStepMs = 170;
   static const idleCommentMs = 7000;
@@ -56,13 +89,12 @@ class GameController extends ChangeNotifier {
   GameOverlay overlay = GameOverlay.none;
   bool hasKey = false;
   bool continuePrompt = false;
-  bool flash = false;
   double shake = 0;
   List<int> dials = [4, 0, 0, 0];
   PuzzleStatus puzzleStatus = PuzzleStatus.idle;
 
   int _leftWalks = 0;
-  bool _saidLeft = false, _saidIdle = false;
+  bool _saidLeft = false, _saidIdle = false, _lied = false;
   int _idleMs = 0, _truthMs = 0, _typeMs = 0, _walkMs = 0;
   final Queue<Tile> _walk = Queue();
   void Function(Tile)? _walkThen;
@@ -73,7 +105,8 @@ class GameController extends ChangeNotifier {
 
   LogLine get current => log.last;
   bool get typing => typed < current.text.length;
-  bool get busy => paused || overlay != GameOverlay.none || continuePrompt;
+  bool get busy =>
+      paused || overlay != GameOverlay.none || continuePrompt || transition.value != null;
   bool get hudVisible => stage < 5;
   bool get isEnding =>
       overlay == GameOverlay.endTrust ||
@@ -92,6 +125,8 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _clock?.cancel();
+    transition.dispose();
+    transitionClock.dispose();
     super.dispose();
   }
 
@@ -116,7 +151,8 @@ class GameController extends ChangeNotifier {
     overlay = GameOverlay.none;
     hasKey = false;
     continuePrompt = false;
-    flash = false;
+    transition.value = null;
+    _lied = false;
     dials = [4, 0, 0, 0];
     puzzleStatus = PuzzleStatus.idle;
     _leftWalks = 0;
@@ -124,6 +160,7 @@ class GameController extends ChangeNotifier {
     _idleMs = _truthMs = 0;
     _setRoom(normal: true);
     scene
+      ..facing = Facing.se
       ..player = const Tile(1, 4)
       ..highlights = const [TileHighlight(Tile(4, 0), C.safe)];
 
@@ -146,7 +183,6 @@ class GameController extends ChangeNotifier {
         scene
           ..player = const Tile(4, 2)
           ..highlights = const []
-          ..glitch = 1
           ..drawerOpen = true
           ..doorHint = true;
         _replaceLog(const [
@@ -177,7 +213,6 @@ class GameController extends ChangeNotifier {
       ..keyOnFloor = false
       ..highlights = const []
       ..doorHint = false
-      ..glitch = 0
       ..crack = false
       ..secret = false
       ..noWalls = false
@@ -190,6 +225,12 @@ class GameController extends ChangeNotifier {
   /// Keeps stage-dependent visuals and tap handlers in step with the state.
   void _syncRoom() {
     scene.doorColor = stage >= 3 ? C.warn : C.safe;
+    glitch.unease = switch (stage) {
+      3 => Unease.broken,
+      4 => Unease.watching,
+      2 when _lied => Unease.hint,
+      _ => Unease.none,
+    };
     final live = stage < 5;
     scene
       ..onTile = live ? onTile : null
@@ -249,6 +290,14 @@ class GameController extends ChangeNotifier {
       changed |= due.isNotEmpty;
     }
 
+    if (glitch.tick(ms)) changed = true;
+
+    final tr = transition.value;
+    if (tr != null) {
+      tr.elapsed += ms;
+      transitionClock.value = tr.elapsed;
+    }
+
     if (shake > 0) {
       shake = (shake - ms / 300).clamp(0, 1);
       changed = true;
@@ -285,11 +334,22 @@ class GameController extends ChangeNotifier {
     if (k == LineKind.lie) _buzz();
   }
 
-  void _doFlash() {
-    flash = true;
-    _buzz();
-    if (settings.screenShake) shake = 1;
-    _later(140, () => flash = false);
+  /// Covers the screen, swaps the stage in [onCovered] while nothing is
+  /// visible, then reveals it. [afterReveal] runs once the screen is clear.
+  void _transition(StageTransition t,
+      {required VoidCallback onCovered, VoidCallback? afterReveal}) {
+    transition.value = t;
+    transitionClock.value = 0;
+    glitch.burst(ms: t.coverMs, heavy: t.kind == TransitionKind.tear);
+    _later(t.coverMs, () {
+      _buzz();
+      if (settings.screenShake) shake = 1;
+      onCovered();
+      _later(t.revealMs, () {
+        transition.value = null;
+        afterReveal?.call();
+      });
+    });
   }
 
   void _buzz() {
@@ -377,18 +437,21 @@ class GameController extends ChangeNotifier {
         ..keyOnFloor = false
         ..highlights = const [];
       _say('...YOU FOUND IT ANYWAY.', LineKind.sys);
-      _later(1400, () {
-        _doFlash();
-        stage = 3;
-        step = Step.door2;
-        scene
-          ..glitch = 1
-          ..doorHint = true
-          ..wallText = const [];
-        _syncRoom();
-        _say('USE THE KEY.', LineKind.cmd);
-        _later(900, () => _say('OPEN THE DOOR.', LineKind.cmd));
-      });
+      _later(1400, () => _transition(
+            StageTransition(TransitionKind.tear, '03 / UI GL1TCH'),
+            onCovered: () {
+              stage = 3;
+              step = Step.door2;
+              scene
+                ..doorHint = true
+                ..wallText = const [];
+              _syncRoom();
+            },
+            afterReveal: () {
+              _say('USE THE KEY.', LineKind.cmd);
+              _later(900, () => _say('OPEN THE DOOR.', LineKind.cmd));
+            },
+          ));
     }
   }
 
@@ -421,8 +484,15 @@ class GameController extends ChangeNotifier {
           ..doorHint = false;
         _say('GO THROUGH. TRUST ME.', LineKind.cmd);
       case Step.through:
-        _doFlash();
-        _enterStage4(announce: true);
+        step = Step.wait;
+        _transition(
+          StageTransition(TransitionKind.light, '04 / WATCHING', origin: doorLight),
+          onCovered: () => _enterStage4(announce: false),
+          afterReveal: () {
+            _say('WELCOME BACK TO ROOM 01.', LineKind.sys);
+            _later(1500, () => _say("DON'T TOUCH THE WALL.", LineKind.cmd));
+          },
+        );
       case _ when stage == 4:
         _say('Not this time.', LineKind.voice);
       case Step.drawer || Step.key:
@@ -439,8 +509,7 @@ class GameController extends ChangeNotifier {
     _setRoom(normal: true);
     scene
       ..player = const Tile(1, 4)
-      ..crack = true
-      ..glitch = 1;
+      ..crack = true;
     _idleMs = 0;
     _syncRoom();
     if (announce) {
@@ -471,20 +540,25 @@ class GameController extends ChangeNotifier {
   void onCrack() {
     if (busy || stage != 4) return;
     _walkTo(const Tile(0, 1), (_) {
-      _doFlash();
-      stage = 5;
-      step = Step.truth;
-      _setRoom(normal: false);
-      scene
-        ..secret = true
-        ..wallText = truthWallText
-        ..player = const Tile(1, 2);
-      _syncRoom();
-      _say('...', LineKind.sys);
-      _later(1300, () {
-        _truthMs = 0;
-        overlay = GameOverlay.truth;
-      });
+      _transition(
+        StageTransition(TransitionKind.light, '05 / TRUTH', origin: crackLight),
+        onCovered: () {
+          stage = 5;
+          step = Step.truth;
+          _setRoom(normal: false);
+          scene
+            ..secret = true
+            ..wallText = truthWallText
+            ..facing = Facing.nw // facing the opening
+            ..player = const Tile(1, 2);
+          _syncRoom();
+          _say('...', LineKind.sys);
+        },
+        afterReveal: () => _later(1300, () {
+          _truthMs = 0;
+          overlay = GameOverlay.truth;
+        }),
+      );
     });
     notifyListeners();
   }
@@ -509,6 +583,10 @@ class GameController extends ChangeNotifier {
         _later(1300, () {
           _say('I LIED.', LineKind.lie);
           continuePrompt = true;
+          // From here on the UI is allowed to slip, just a little.
+          _lied = true;
+          _syncRoom();
+          glitch.burst(ms: 220, heavy: false);
         });
       });
     } else {
@@ -546,7 +624,14 @@ class GameController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- pause / endings
 
-  bool get canPause => stage < 5 && (overlay == GameOverlay.none || overlay == GameOverlay.log);
+  bool get canPause =>
+      stage < 5 &&
+      transition.value == null &&
+      (overlay == GameOverlay.none || overlay == GameOverlay.log);
+
+  /// Light sources for the transitions, in room-canvas coordinates.
+  static final doorLight = Iso.p(4.25, 0, 35);
+  static final crackLight = Iso.p(0, 1.66, 52);
 
   void pause() {
     if (!canPause || paused) return;
@@ -583,6 +668,7 @@ class GameController extends ChangeNotifier {
       scene
         ..noCabinet = true
         ..doorOpen = true
+        ..facing = Facing.ne // back turned, looking at the way out
         ..player = const Tile(4, 1);
     } else {
       _setRoom(normal: false);

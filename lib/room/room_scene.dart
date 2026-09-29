@@ -1,6 +1,8 @@
 import 'dart:ui';
 
+import '../game/glitch.dart';
 import '../theme.dart';
+import 'character.dart';
 
 class Tile {
   const Tile(this.i, this.j);
@@ -65,6 +67,9 @@ class RoomScene {
   });
 
   Tile? player;
+
+  /// Which way the player looks when standing still (and after a teleport).
+  Facing facing = Facing.se;
   bool doorOpen;
   bool drawerOpen;
   bool keyOnFloor;
@@ -72,8 +77,11 @@ class RoomScene {
   bool doorHint;
   Color doorColor;
 
-  /// 0 = stable, 1 = light slices (live stages 03–04), 2 = heavy (glitch sheet).
+  /// Static rooms: 0 = stable, 1 = light slices, 2 = heavy (design sheet 06).
   int glitch;
+
+  /// Live rooms: per-frame glitch driven by the GlitchDirector (overrides [glitch]).
+  GlitchFx? fx;
   bool crack;
   bool secret;
   bool noWalls;

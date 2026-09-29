@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../game/game_controller.dart';
 import '../game/overlays.dart';
+import '../game/transition_overlay.dart';
 import '../main.dart';
-import '../theme.dart';
 import '../widgets/common.dart';
 import 'settings_screen.dart';
 
@@ -109,20 +109,24 @@ class _GameScreenState extends State<GameScreen> {
           child: trustEnd ? const TrustEndingTerminal() : Terminal(g),
         ),
       if (g.paused) Positioned.fill(child: PauseOverlay(g, onSettings: _openSettings, onMenu: _toMenu)),
-      if (showHud) Positioned(top: 26, left: 20, right: 20, child: Hud(g, forceTrust: trustEnd)),
+      if (showHud)
+        Positioned(
+          top: 26,
+          left: 20,
+          right: 20,
+          child: Transform.translate(
+            offset: g.glitch.jitter,
+            child: Hud(g, forceTrust: trustEnd),
+          ),
+        ),
       if (unstable) const Positioned.fill(child: Scanlines()),
       Positioned.fill(child: SheetHost(g)),
       Positioned(left: 0, right: 0, bottom: 0, child: TruthChoice(g)),
       if (g.overlay == GameOverlay.endDont)
         Positioned(left: 28, right: 28, bottom: 46, child: DontTrustEnding(onLeave: _toMenu)),
       if (g.overlay == GameOverlay.endTrue) Positioned.fill(child: TrueEnding(onDone: _toMenu)),
-      IgnorePointer(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 60),
-          opacity: g.flash ? .85 : 0,
-          child: const ColoredBox(color: C.ink, child: SizedBox.expand()),
-        ),
-      ),
+      // Stage transitions sit above everything; the room swaps underneath.
+      Positioned.fill(child: TransitionOverlay(g, roomTop: 96)),
     ]);
   }
 }

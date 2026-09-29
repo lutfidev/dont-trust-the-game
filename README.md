@@ -7,6 +7,7 @@ from a Claude Design handoff (`Dont Trust The Game.dc.html`).
 flutter pub get
 flutter run                              # menu → boot → stage 01
 flutter run --dart-define=START_STAGE=3  # jump to a stage (1–4) for testing
+flutter run --dart-define=CHARACTER=cloak # player design: pill (default) | cloak | block
 flutter test
 ```
 
@@ -35,6 +36,43 @@ flutter test
 - The secret-room wall lines are re-spaced and the left-wall lines wrapped, so they no longer overlap each other or the opening.
 - IBM Plex Mono has no ▸ ▲ ▼ glyphs, so they are drawn as small triangles.
 - Music/SFX levels are stored but no audio is wired yet (there are no audio assets). Vibration is used for the lie and for flashes; screen shake applies to flashes.
+
+## Glitch, transitions, character
+
+- **Living glitch** (`lib/game/glitch.dart`): a `GlitchDirector` on the game clock
+  fires short bursts whose frequency depends on the story. It is still in 01 and 05,
+  rare after "I LIED." in 02 (the pause button flashes `[ TRUST ME ]` once in a
+  while), steady in 04 and frequent in 03. During a burst the room slices and
+  red ghost are re-rolled every 50ms, the HUD jitters, labels swap
+  (`[ II ]`↔`[ TRUST ME ]`, `04 / I SEE YOU`, `I KNOW WHERE YOU'LL TAP`) and a
+  few characters of the instruction are scrambled. Between bursts 03–04 look
+  exactly like the design. Pausing freezes it.
+- **Stage transitions** (`lib/game/transition_overlay.dart`) replace the white
+  flash. There are two kinds:
+  - black bands tear shut for 02 → 03;
+  - light floods out of the door (03 → 04) or the crack (04 → 05).
+
+  Both hold on a typed stage card. The stage swaps while the screen is fully
+  covered, and input and pause are locked meanwhile.
+- **Character** (`lib/room/character.dart`) has 3 designs × 4 iso facings × idle
+  (4 frames) + walk (8 frames: bob, squash, lean, alternating feet). It is played
+  in-game from sprite sheets by `PlayerSheet`, faces where it walks, and idles
+  when it stops. `docs/characters.png` compares the designs.
+
+### Sprite sheets
+
+`assets/images/sprites/player_<style>.png` + `player.json` (atlas: frame size,
+anchor, rows = facings, idle/walk frame ranges and timing). Regenerate from the
+painter with:
+
+```sh
+flutter test tool/generate_sprites.dart
+```
+
+Artists can replace the PNGs directly; the game reads frame counts and timing
+from `player.json`, so a hand-drawn sheet with a different layout only needs the
+JSON updated. Frames are drawn at 4× (128×192 px, feet at 64,168) and shown at
+32×48 room units.
 
 ## App icon
 

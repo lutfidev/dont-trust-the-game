@@ -7,8 +7,11 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/painting.dart' show TextPainter, TextSpan, TextStyle;
 
+import '../game/glitch.dart';
 import '../theme.dart';
+import 'character.dart';
 import 'iso.dart';
+import 'player_sheet.dart';
 import 'room_scene.dart';
 
 Offset _p(double i, double j, [double z = 0]) => Iso.p(i, j, z);
@@ -39,6 +42,7 @@ class RoomGame extends FlameGame {
   @override
   Future<void> onLoad() async {
     camera.viewfinder.anchor = Anchor.topLeft;
+    final sheet = await PlayerSheet.load(images, activeCharacter);
     world.add(GlitchLayer(scene)
       ..addAll([
         _Shell(scene),
@@ -48,7 +52,7 @@ class RoomGame extends FlameGame {
         _Crack(scene),
         _Secret(scene),
         _Lamp(scene),
-        _Player(scene),
+        _Player(scene, sheet),
         _Cabinet(scene),
         _FloorKey(scene),
       ]));
@@ -61,12 +65,15 @@ class GlitchLayer extends PositionComponent {
   GlitchLayer(this.scene) : super(size: Vector2(Iso.canvas.width, Iso.canvas.height));
   final RoomScene scene;
 
-  static const _light = [(172.0, 8.0, -7.0), (262.0, 10.0, 5.0)];
-  static const _heavy = [
-    (112.0, 12.0, 9.0),
-    (178.0, 6.0, -14.0),
-    (236.0, 16.0, 6.0),
-    (286.0, 5.0, -9.0),
+  static const List<Slice> _light = [
+    (y: 172, h: 8, dx: -7),
+    (y: 262, h: 10, dx: 5),
+  ];
+  static const List<Slice> _heavy = [
+    (y: 112, h: 12, dx: 9),
+    (y: 178, h: 6, dx: -14),
+    (y: 236, h: 16, dx: 6),
+    (y: 286, h: 5, dx: -9),
   ];
   static const _red = ColorFilter.matrix([
     1.6, 0, 0, 0, 0, //
@@ -77,27 +84,43 @@ class GlitchLayer extends PositionComponent {
 
   @override
   void renderTree(Canvas canvas) {
-    if (scene.glitch == 0) return super.renderTree(canvas);
+    // Live rooms are driven by the GlitchDirector; static rooms by `glitch`.
+    final fx = scene.fx;
+    final List<Slice> slices;
+    final double ghostDx, ghostOpacity;
+    if (fx != null) {
+      slices = fx.slices;
+      ghostDx = fx.ghostDx;
+      ghostOpacity = fx.ghostOpacity;
+    } else {
+      slices = switch (scene.glitch) { 0 => const [], 1 => _light, _ => _heavy };
+      ghostDx = -3;
+      ghostOpacity = switch (scene.glitch) { 0 => 0, 1 => .18, _ => .32 };
+    }
+    if (slices.isEmpty && ghostOpacity == 0) return super.renderTree(canvas);
+
     final rec = PictureRecorder();
     super.renderTree(Canvas(rec));
     final pic = rec.endRecording();
     canvas.drawPicture(pic);
 
-    final ghost = Paint()
-      ..colorFilter = _red
-      ..blendMode = BlendMode.screen
-      ..color = _a(const Color(0xFF000000), scene.glitch >= 2 ? .32 : .18);
-    canvas
-      ..saveLayer(null, ghost)
-      ..translate(-3, 0)
-      ..drawPicture(pic)
-      ..restore();
+    if (ghostOpacity > 0) {
+      final ghost = Paint()
+        ..colorFilter = _red
+        ..blendMode = BlendMode.screen
+        ..color = _a(const Color(0xFF000000), ghostOpacity);
+      canvas
+        ..saveLayer(null, ghost)
+        ..translate(ghostDx, 0)
+        ..drawPicture(pic)
+        ..restore();
+    }
 
-    for (final (y, h, dx) in scene.glitch >= 2 ? _heavy : _light) {
+    for (final sl in slices) {
       canvas
         ..save()
-        ..translate(dx, 0)
-        ..clipRect(Rect.fromLTWH(0, y, Iso.canvas.width, h))
+        ..translate(sl.dx, 0)
+        ..clipRect(Rect.fromLTWH(0, sl.y, Iso.canvas.width, sl.h))
         ..drawPicture(pic)
         ..restore();
     }
@@ -418,12 +441,19 @@ class _Lamp extends _Piece {
   }
 }
 
-/// The player: shadow, pill body, head. Walks tile→tile linearly in 170ms.
+/// The player, played from the sprite sheet: walks tile→tile in 170ms with
+/// the walk cycle, turns to face where it goes, and breathes when idle.
 class _Player extends _Piece {
-  _Player(RoomScene s) : super(s, 10);
+  _Player(RoomScene s, this.sheet) : super(s, 10);
 
+  final PlayerSheet sheet;
   static const stepTime = .17;
+
   Offset? _pos; // fractional tile coords
+  Facing _facing = Facing.se;
+  Pose _pose = Pose.idle;
+  double _animMs = 0, _stillFor = 0;
+  final _paint = Paint()..filterQuality = FilterQuality.medium;
 
   @override
   void update(double dt) {
@@ -435,11 +465,27 @@ class _Player extends _Piece {
     final target = Offset(t.i.toDouble(), t.j.toDouble());
     final cur = _pos;
     if (cur == null || (target - cur).distance > 1.5) {
+      // Teleport (stage change / static room): face the scene's direction.
       _pos = target;
+      _facing = scene.facing;
+      _stillFor = 1;
     } else {
       final d = target - cur, dist = d.distance, step = dt / stepTime;
+      if (dist > 1e-6) {
+        _facing = Facing.of(d.dx, d.dy) ?? _facing;
+        _stillFor = 0;
+      } else {
+        _stillFor += dt;
+      }
       _pos = dist <= step ? target : cur + d / dist * step;
     }
+    // A short grace period keeps the walk cycle going between tiles.
+    final pose = _stillFor < .06 ? Pose.walk : Pose.idle;
+    if (pose != _pose) {
+      _pose = pose;
+      _animMs = 0;
+    }
+    _animMs += dt * 1000;
     // Behind the cabinet only when standing against the left wall's back half.
     priority = t.i == 0 && t.j < 3 ? 7 : 10;
   }
@@ -448,21 +494,7 @@ class _Player extends _Piece {
   void render(Canvas c) {
     final pos = _pos;
     if (pos == null) return;
-    final p = _p(pos.dx + .5, pos.dy + .5);
-    c
-      ..save()
-      ..translate(p.dx, p.dy);
-    c.drawOval(Rect.fromCenter(center: Offset.zero, width: 20, height: 10),
-        _fill(const Color(0xFF000000), .55));
-    const body = Rect.fromLTWH(-6.5, -25, 13, 21);
-    c.drawRRect(
-      RRect.fromRectAndRadius(body, const Radius.circular(6.5)),
-      Paint()
-        ..shader = Gradient.linear(body.centerLeft, body.centerRight,
-            const [Color(0xFFF4F1EA), Color(0xFFABA79F)]),
-    );
-    c.drawCircle(const Offset(0, -31), 5.5, _fill(const Color(0xFFF1EEE7)));
-    c.restore();
+    sheet.draw(c, _p(pos.dx + .5, pos.dy + .5), _facing, _pose, _animMs, _paint);
   }
 }
 
