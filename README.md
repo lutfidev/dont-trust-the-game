@@ -36,4 +36,17 @@ flutter test
 - IBM Plex Mono has no ▸ ▲ ▼ glyphs, so they are drawn as small triangles.
 - Music/SFX levels are stored but no audio is wired yet (there are no audio assets). Vibration is used for the lie and for flashes; screen shake applies to flashes.
 
+## App icon
+
+`assets/icon/icon.png` (full icon: iOS, web, legacy Android) and
+`assets/icon/icon_foreground.png` (Android adaptive foreground on `#0B0B0C`) are
+rendered from SVG by `tool/render_icon.js`: the isometric room with its lit door and
+a red glitch ghost. To regenerate:
+
+```sh
+node tool/render_icon.js            # needs playwright
+dart run flutter_launcher_icons
+git checkout ios/Runner.xcodeproj/project.pbxproj  # the tool wrongly edits a build flag there
+```
+
 Fonts: IBM Plex Mono and Instrument Serif (SIL OFL, `assets/fonts/OFL.txt`).
