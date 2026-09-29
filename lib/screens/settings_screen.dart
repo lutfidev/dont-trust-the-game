@@ -63,6 +63,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Row('VIBRATION', _Toggle(s.vibration, s.toggleVibration)),
               _Row('SCREEN SHAKE', _Toggle(s.screenShake, s.toggleShake)),
               _Row(
+                'REDUCE GLITCH',
+                _Toggle(s.reduceGlitch, s.toggleReduceGlitch),
+                sub: Text('LESS FLICKER · SOFT TRANSITIONS',
+                    style: mono(10, color: C.muted, tracking: .14)),
+              ),
+              _Row(
                 'LET THE GAME HELP YOU',
                 _Toggle(s.assist, s.toggleAssist),
                 sub: Text(s.assistMessage, style: mono(10, color: C.warn, tracking: .14)),

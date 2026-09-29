@@ -49,6 +49,21 @@ class GlitchDirector {
   Unease get unease => _unease;
   bool get bursting => _burstLeft > 0;
 
+  bool _reduced = false;
+
+  /// Reduce-glitch accessibility mode: no bursts (no flicker, jitter,
+  /// scrambling or re-rolled slices). The design's steady look for 03–04 stays.
+  bool get reduced => _reduced;
+  set reduced(bool r) {
+    if (r == _reduced) return;
+    _reduced = r;
+    if (r && _burstLeft > 0) {
+      _burstLeft = 0;
+      _scheduleNext();
+      _rest();
+    }
+  }
+
   set unease(Unease u) {
     if (u == _unease) return;
     _unease = u;
@@ -60,6 +75,7 @@ class GlitchDirector {
   /// Forces an immediate burst (stage transitions). Returns nothing visible
   /// when [heavy] is false and the game is calm.
   void burst({int ms = 260, bool heavy = true}) {
+    if (_reduced) return;
     _burstLeft = ms;
     _startBurst(heavy: heavy);
   }
@@ -81,7 +97,7 @@ class GlitchDirector {
       }
       return false;
     }
-    if (_unease == Unease.none) return false;
+    if (_unease == Unease.none || _reduced) return false;
     _untilNext -= ms;
     if (_untilNext > 0) return false;
     _burstLeft = _range(_unease.burstMin, _unease.burstMax);

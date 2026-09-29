@@ -28,6 +28,10 @@ class SettingsStore extends ChangeNotifier {
   bool get vibration => _prefs.getBool('vibration') ?? true;
   bool get screenShake => _prefs.getBool('shake') ?? false;
 
+  /// Accessibility: no flicker bursts and soft fades instead of flashy
+  /// transitions. Unlike "LET THE GAME HELP YOU", the game always respects it.
+  bool get reduceGlitch => _prefs.getBool('reduceGlitch') ?? false;
+
   /// "LET THE GAME HELP YOU" — it never stays off.
   bool assist = true;
   String assistMessage = '';
@@ -40,6 +44,8 @@ class SettingsStore extends ChangeNotifier {
   void setSpeed(TextSpeed v) => _set(() => _prefs.setInt('speed', v.index));
   void toggleVibration() => _set(() => _prefs.setBool('vibration', !vibration));
   void toggleShake() => _set(() => _prefs.setBool('shake', !screenShake));
+  void toggleReduceGlitch() =>
+      _set(() => _prefs.setBool('reduceGlitch', !reduceGlitch));
 
   void toggleAssist() {
     if (!assist) return;

@@ -178,4 +178,34 @@ void main() {
     d.burst(ms: 100);
     expect(d.scramble('OPEN THE DOOR.'), hasLength(14));
   });
+
+  test('reduce glitch stops bursts but keeps the steady look', () {
+    final d = GlitchDirector(math.Random(4))..unease = Unease.broken;
+    final rest = d.fx.slices;
+    d.reduced = true;
+    var bursts = 0;
+    for (var t = 0; t < 20000; t += 16) {
+      d.tick(16);
+      if (d.bursting) bursts++;
+    }
+    expect(bursts, 0);
+    d.burst(ms: 300);
+    expect(d.bursting, isFalse, reason: 'transitions do not force a burst');
+    expect(d.fx.slices, rest);
+    expect(d.flicker('[ TRUST ME ]', '[ II ]'), '[ TRUST ME ]');
+    expect(d.scramble('OPEN THE DOOR.'), 'OPEN THE DOOR.');
+  });
+
+  test('the controller follows the setting and the OS reduce-motion flag', () async {
+    final g = GameController(settings, startStage: 3, random: math.Random(5));
+    g.tick(16);
+    expect(g.glitch.reduced, isFalse);
+    settings.toggleReduceGlitch();
+    g.tick(16);
+    expect(g.glitch.reduced, isTrue);
+    settings.toggleReduceGlitch();
+    g.systemReduceMotion = true;
+    g.tick(16);
+    expect(g.glitch.reduced, isTrue);
+  });
 }

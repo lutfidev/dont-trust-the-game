@@ -29,6 +29,7 @@ class _GameScreenState extends State<GameScreen> {
     super.didChangeDependencies();
     _game ??= GameController(AppScope.of(context), startStage: GameScreen.startStage)
       ..start();
+    _game!.systemReduceMotion = MediaQuery.disableAnimationsOf(context);
   }
 
   @override
