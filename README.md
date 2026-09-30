@@ -17,6 +17,7 @@ flutter test
 | --- | --- |
 | `lib/room/` | The Flame world: 2:1 iso projection (`iso.dart`), the mutable `RoomScene`, and `RoomGame` — flat polygons, 3 tones per object, priority-sorted pieces, and the glitch layer (red ghost ±3px + offset horizontal slices). |
 | `lib/game/game_controller.dart` | The story state machine (01 TRUST → 05 TRUTH, 3 endings) on a pause-aware clock: typing, walking (170ms/tile, BFS), scheduled beats and idle comments all freeze while paused. |
+| `lib/audio/` | Audio: cue catalog (`Sfx`, `Mood`), the `GameAudio` interface, `AudioDirector` (crossfades, tape-stop, ducking, cooldowns, settings) and the flutter_soloud backend. |
 | `lib/game/overlays.dart` | Flutter overlays over the `GameWidget`: HUD, terminal, pause, drawer puzzle, log, truth choice, endings. |
 | `lib/screens/` | Main menu, boot/intro, gameplay, settings. |
 | `lib/widgets/common.dart` | `DesignFrame` (lays out on the design's 360-wide canvas and scales to the device), bracket buttons, blinking cursor, scanlines. |
@@ -35,7 +36,9 @@ flutter test
 - The scratched code sits left of the door, as `4·0·7·1`. In the prototype the door covered the "7".
 - The secret-room wall lines are re-spaced and the left-wall lines wrapped, so they no longer overlap each other or the opening.
 - IBM Plex Mono has no ▸ ▲ ▼ glyphs, so they are drawn as small triangles.
-- Music/SFX levels are stored but no audio is wired yet (there are no audio assets). Vibration is used for the lie and for flashes; screen shake applies to flashes.
+- Music and sound effects are original and generated in this repo (see
+  **Audio**). Vibration is used for the lie and for flashes; screen shake
+  applies to flashes.
 
 ## Glitch, transitions, character
 
@@ -79,6 +82,47 @@ Artists can replace the PNGs directly; the game reads frame counts and timing
 from `player.json`, so a hand-drawn sheet with a different layout only needs the
 JSON updated. Frames are drawn at 4× (128×192 px, feet at 64,168) and shown at
 32×48 room units.
+
+## Audio
+
+**A lullaby that lies.** The game has one musical voice: a music-box tune
+over a warm pad, friendly the way "I WILL HELP YOU." is. As trust breaks,
+the *same song* decays instead of being swapped for other music:
+
+| Moment | Music |
+| --- | --- |
+| Menu, 01 | The lullaby. Once per loop one note sags out of tune, the musical "don't". |
+| 02, "I LIED." | Tape-stop: the song slows and pitch-dives to silence, and stays silent until `[ CONTINUE ]`. Then the same song returns sour, each phrase ending a semitone wrong. |
+| 03 | Broken: bitcrushed fragments, stutters, dropouts over a dissonant drone. Glitch bursts make the music stumble. |
+| 04 | Slower and lower, notes missing (it's listening), a soft pulse. |
+| 05 | No music, only the room: "the game cannot control you if you stop listening". |
+| Endings | TRUST cuts straight back to the lullaby. DON'T TRUST opens onto wind. TRUE: silence, then one pure chord, once. |
+
+- **SFX:** 28 short sounds (UI clicks, typing ticks, steps, door, drawer,
+  dial, key, crack, lie sting, glitches, transitions, pause).
+  Rapid repeats are rate-limited.
+- **REDUCE GLITCH:** no glitch sounds or music stumbles, and soft whooshes
+  instead of the tear and light sounds.
+- **Volume:** MUSIC and SFX are live (−3 dB per step). Tap the first cell
+  again at 1 to mute.
+
+All audio is original, synthesized by `tool/audio/generate_audio.py` from
+oscillators and noise (no samples, fixed seeds). See
+`assets/audio/README.md`. To change a sound, edit `tool/audio/sfx.py` or
+`tool/audio/music.py` and regenerate:
+
+```sh
+python -m venv tool/audio/.venv
+tool/audio/.venv/Scripts/pip install -r tool/audio/requirements.txt   # bin/ on macOS/Linux
+tool/audio/.venv/Scripts/python tool/audio/generate_audio.py           # or: … generate_audio.py click trust
+tool/audio/.venv/Scripts/python -m unittest discover -s tool/audio
+```
+
+In the app (`lib/audio/`), the game only sends cues (`play(Sfx)`,
+`mood(Mood)`, `tapeStop()` …) to `GameAudio`. `AudioDirector` turns them
+into crossfades, ducking and cooldowns, and `SoloudBackend` plays them with
+[flutter_soloud](https://pub.dev/packages/flutter_soloud). Tests run
+silent.
 
 ## App icon
 

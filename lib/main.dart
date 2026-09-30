@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'audio/audio_director.dart';
 import 'audio/game_audio.dart';
+import 'audio/soloud_backend.dart';
 import 'screens/main_menu.dart';
 import 'settings.dart';
 import 'theme.dart';
@@ -14,7 +18,11 @@ Future<void> main() async {
     systemNavigationBarColor: C.void_,
   ));
   final settings = await SettingsStore.load();
-  runApp(DontTrustTheGame(settings: settings));
+  final audio = AudioDirector(SoloudBackend(), settings);
+  unawaited(audio.start()); // loads in the background; the game never waits on sound
+  // Let the audio device rest while the app is in the background.
+  AppLifecycleListener(onHide: audio.suspend, onShow: audio.resume);
+  runApp(DontTrustTheGame(settings: settings, audio: audio));
 }
 
 /// Makes the [SettingsStore] available to every screen.
