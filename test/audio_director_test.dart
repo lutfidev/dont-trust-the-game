@@ -68,6 +68,27 @@ void main() {
     expect(fake.log, isEmpty);
   });
 
+  test('an engine call that throws costs its sound, never the game', () async {
+    final d = await ready();
+    fake.failCalls = true;
+    d
+      ..play(Sfx.click)
+      ..hiccup(heavy: true)
+      ..mood(Mood.lie) // the old voice can't be stopped, the new one can't start
+      ..tapeStop()
+      ..cover(const Duration(milliseconds: 380))
+      ..uncover()
+      ..duck(true);
+    settings.setMusic(3);
+    await d.suspend();
+    await d.resume();
+    expect(fake.log, isEmpty);
+
+    fake.failCalls = false; // once the engine answers again, music goes on
+    d.mood(Mood.broken);
+    expect(fake.log, ['start broken 0.00 #2', 'fade #2 1.00 400']);
+  });
+
   test('moods crossfade, repeats are no-ops, cut is instant', () async {
     final d = await ready();
     d.mood(Mood.trust);
@@ -193,6 +214,7 @@ void main() {
     await d.resume();
     expect(fake.log.sublist(fake.log.length - 2), ['suspend', 'resume']);
   });
+
   test('spamming a button does not stack its sound', () async {
     final d = await ready();
     for (final s in [Sfx.wrong, Sfx.wrongLied, Sfx.doorLocked, Sfx.voice, Sfx.pause, Sfx.resume]) {
