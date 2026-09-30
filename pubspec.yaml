@@ -35,6 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   flame: ^1.38.2
   shared_preferences: ^2.5.5
+  flutter_soloud: ^5.1.5
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,8 @@ flutter:
 
   assets:
     - assets/images/sprites/
+    - assets/audio/sfx/
+    - assets/audio/music/
 
   fonts:
     - family: IBMPlexMono

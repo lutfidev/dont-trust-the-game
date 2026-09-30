@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../audio/cues.dart';
+import '../audio/game_audio.dart';
 import '../main.dart';
 import '../settings.dart';
 import '../theme.dart';
@@ -35,8 +37,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
               const SizedBox(height: 34),
-              _Row('MUSIC', _Cells(s.music, s.setMusic)),
-              _Row('SFX', _Cells(s.sfx, s.setSfx)),
+              _Row('MUSIC', _Cells('music', s.music, s.setMusic)),
+              _Row('SFX', _Cells('sfx', s.sfx, s.setSfx)),
               _Row(
                 'TEXT SPEED',
                 Row(children: [
@@ -44,7 +46,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
                       child: GestureDetector(
-                        onTap: () => s.setSpeed(sp),
+                        onTap: () {
+                          s.setSpeed(sp);
+                          AudioScope.of(context).play(Sfx.click);
+                        },
                         child: Container(
                           height: 36,
                           padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -80,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
+                      AudioScope.of(context).play(Sfx.click);
                       if (_resetTaps == 1) s.resetProgress();
                       setState(() => _resetTaps = (_resetTaps + 1).clamp(0, 2));
                     },
@@ -135,7 +141,8 @@ class _Row extends StatelessWidget {
 }
 
 class _Cells extends StatelessWidget {
-  const _Cells(this.value, this.onSet);
+  const _Cells(this.name, this.value, this.onSet);
+  final String name;
   final int value;
   final ValueChanged<int> onSet;
 
@@ -145,8 +152,14 @@ class _Cells extends StatelessWidget {
           Padding(
             padding: EdgeInsets.only(left: k == 0 ? 0 : 3),
             child: GestureDetector(
+              key: ValueKey('$name-$k'),
               behavior: HitTestBehavior.opaque,
-              onTap: () => onSet(k + 1),
+              onTap: () {
+                // The first cell again at 1 mutes; the click comes after, so
+                // on the SFX row it previews the new level.
+                onSet(k == 0 && value == 1 ? 0 : k + 1);
+                AudioScope.of(context).play(Sfx.click);
+              },
               child: SizedBox(
                 width: 13,
                 height: 44,
@@ -170,7 +183,10 @@ class _Toggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
+        onTap: () {
+          AudioScope.of(context).play(Sfx.click);
+          onTap();
+        },
         child: SizedBox(
           height: 44,
           child: Center(

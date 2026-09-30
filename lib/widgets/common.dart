@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flame/game.dart' show GameWidget;
 import 'package:flutter/material.dart';
 
+import '../audio/cues.dart';
+import '../audio/game_audio.dart';
 import '../room/iso.dart';
 import '../room/room_game.dart';
 import '../room/room_scene.dart';
@@ -128,7 +130,12 @@ class _BlockButtonState extends State<BlockButton> {
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                AudioScope.of(context).play(Sfx.click);
+                widget.onTap!();
+              },
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 80),
           opacity: _down ? .6 : 1,
@@ -298,7 +305,12 @@ class HudButton extends StatelessWidget {
         label: label,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: onTap,
+          onTap: onTap == null
+              ? null
+              : () {
+                  AudioScope.of(context).play(Sfx.click);
+                  onTap!();
+                },
           child: Container(
             height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 14),

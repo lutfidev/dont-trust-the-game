@@ -5,6 +5,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../audio/cues.dart';
+import '../audio/game_audio.dart';
 import '../room/character.dart';
 import '../room/iso.dart';
 import '../room/room_scene.dart';
@@ -49,6 +51,18 @@ class StageTransition {
   int get coverMs => kind == TransitionKind.tear ? 380 : 450;
   int get totalMs => kind == TransitionKind.tear ? 1550 : 1700;
   int get revealMs => totalMs - coverMs;
+
+  /// Characters of [card] typed so far: typing starts 120ms after the screen
+  /// is covered, one character every 30ms.
+  int get cardChars {
+    final ms = elapsed - coverMs - 120;
+    return ms <= 0 ? 0 : math.min(card.length, ms ~/ 30);
+  }
+
+  /// Length of the reveal animation at the end (the painters in
+  /// transition_overlay.dart).
+  int outMs({required bool reduced}) =>
+      kind == TransitionKind.tear && !reduced ? 300 : 500;
 }
 
 /// The whole story as a state machine: stages 01 TRUST → 05 TRUTH.
@@ -56,7 +70,8 @@ class StageTransition {
 /// All timing runs through [tick] on a pause-aware clock, so scheduled beats,
 /// typing and walking freeze while the pause menu is open.
 class GameController extends ChangeNotifier {
-  GameController(this.settings, {int startStage = 1, math.Random? random})
+  GameController(this.settings,
+      {int startStage = 1, math.Random? random, this.audio = const SilentAudio()})
       : glitch = GlitchDirector(random) {
     scene.fx = glitch.fx;
     _reset(startStage);
@@ -65,6 +80,9 @@ class GameController extends ChangeNotifier {
   final SettingsStore settings;
   final RoomScene scene = RoomScene();
   final GlitchDirector glitch;
+
+  /// Where the game's cues go; silent unless the app provides audio.
+  final GameAudio audio;
 
   /// The OS "remove animations / reduce motion" setting, set by the screen.
   bool systemReduceMotion = false;
@@ -98,7 +116,7 @@ class GameController extends ChangeNotifier {
 
   int _leftWalks = 0;
   bool _saidLeft = false, _saidIdle = false, _lied = false;
-  int _idleMs = 0, _truthMs = 0, _typeMs = 0, _walkMs = 0;
+  int _idleMs = 0, _truthMs = 0, _typeMs = 0, _walkMs = 0, _steps = 0;
   final Queue<Tile> _walk = Queue();
   void Function(Tile)? _walkThen;
   final List<(int, VoidCallback)> _tasks = [];
@@ -240,7 +258,26 @@ class GameController extends ChangeNotifier {
       ..onDoor = live ? onDoor : null
       ..onCabinet = live ? onCabinet : null
       ..onCrack = live ? onCrack : null;
+    _syncMusic();
   }
+
+  /// The music for this moment (see docs/superpowers/specs/2026-09-30-audio-design.md).
+  Mood get mood => switch (overlay) {
+        GameOverlay.endTrust => Mood.trust,
+        GameOverlay.endDont => Mood.exit,
+        GameOverlay.endTrue => Mood.truthEnd,
+        _ => switch (stage) {
+            5 => Mood.room,
+            4 => Mood.watching,
+            3 => Mood.broken,
+            // "I LIED." hangs in silence until CONTINUE.
+            2 when _lied => continuePrompt ? Mood.silence : Mood.lie,
+            _ => Mood.trust,
+          },
+      };
+
+  /// Ending TRUST cuts straight back to the lullaby, as if nothing happened.
+  void _syncMusic() => audio.mood(mood, cut: overlay == GameOverlay.endTrust);
 
   void restart([int s = 1]) {
     _reset(s);
@@ -260,6 +297,7 @@ class GameController extends ChangeNotifier {
         _typeMs -= per;
         typed++;
         changed = true;
+        _typeTick(current.kind, current.text[typed - 1]);
       }
     } else {
       _typeMs = 0;
@@ -270,6 +308,8 @@ class GameController extends ChangeNotifier {
       while (_walkMs >= walkStepMs && _walk.isNotEmpty) {
         _walkMs -= walkStepMs;
         scene.player = _walk.removeFirst();
+        audio.play(stage == 4 ? Sfx.stepWatch : Sfx.step,
+            rate: (_steps++).isEven ? .96 : 1.04);
         changed = true;
         if (_walk.isEmpty) {
           final then = _walkThen;
@@ -294,12 +334,22 @@ class GameController extends ChangeNotifier {
     }
 
     glitch.reduced = settings.reduceGlitch || systemReduceMotion;
+    final wasBursting = glitch.bursting;
     if (glitch.tick(ms)) changed = true;
+    // Only bursts the director starts on its own make a sound; forced ones
+    // (transitions, the lie) have their own.
+    if (!wasBursting && glitch.bursting) {
+      audio
+        ..play(glitch.heavy ? Sfx.glitchHeavy : Sfx.glitchLight)
+        ..hiccup(heavy: glitch.heavy);
+    }
 
     final tr = transition.value;
     if (tr != null) {
+      final typedBefore = tr.cardChars;
       tr.elapsed += ms;
       transitionClock.value = tr.elapsed;
+      if (tr.cardChars > typedBefore) _typeTick(LineKind.sys, tr.card[tr.cardChars - 1]);
     }
 
     if (shake > 0) {
@@ -330,12 +380,32 @@ class GameController extends ChangeNotifier {
 
   void _later(int ms, VoidCallback fn) => _tasks.add((ms, fn));
 
+  /// Key tick for terminal text. Spaces and the ok / lie / voice lines (which
+  /// have their own cue) stay silent.
+  void _typeTick(LineKind kind, String char) {
+    if ((kind == LineKind.sys || kind == LineKind.cmd) && char != ' ') {
+      audio.play(Sfx.type);
+    }
+  }
+
   void _say(String t, LineKind k) {
     log.add(LogLine(t, k));
     lineCount++;
     typed = 0;
     _typeMs = 0;
-    if (k == LineKind.lie) _buzz();
+    switch (k) {
+      case LineKind.lie:
+        _buzz();
+        audio
+          ..play(Sfx.lie)
+          ..tapeStop();
+      case LineKind.ok:
+        audio.play(Sfx.good);
+      case LineKind.voice:
+        audio.play(Sfx.voice);
+      case LineKind.sys || LineKind.cmd:
+        break;
+    }
   }
 
   /// Covers the screen, swaps the stage in [onCovered] while nothing is
@@ -343,13 +413,26 @@ class GameController extends ChangeNotifier {
   void _transition(StageTransition t,
       {required VoidCallback onCovered, VoidCallback? afterReveal}) {
     glitch.reduced = settings.reduceGlitch || systemReduceMotion;
+    final reduced = glitch.reduced;
     transition.value = t;
     transitionClock.value = 0;
     glitch.burst(ms: t.coverMs, heavy: t.kind == TransitionKind.tear);
+    audio
+      ..play(reduced
+          ? Sfx.fade
+          : t.kind == TransitionKind.tear
+              ? Sfx.tear
+              : Sfx.light)
+      ..cover(Duration(milliseconds: t.coverMs));
     _later(t.coverMs, () {
       _buzz();
       if (settings.screenShake) shake = 1;
       onCovered();
+      // The new stage's music starts as the screen opens up again.
+      _later(t.revealMs - t.outMs(reduced: reduced), () {
+        audio.uncover();
+        if (t.kind == TransitionKind.tear && !reduced) audio.play(Sfx.tearOpen);
+      });
       _later(t.revealMs, () {
         transition.value = null;
         afterReveal?.call();
@@ -438,6 +521,7 @@ class GameController extends ChangeNotifier {
     if (step == Step.key && n == const Tile(5, 5)) {
       step = Step.wait;
       hasKey = true;
+      audio.play(Sfx.key);
       scene
         ..keyOnFloor = false
         ..highlights = const [];
@@ -474,6 +558,7 @@ class GameController extends ChangeNotifier {
       case Step.door1:
         step = Step.wait;
         scene.doorHint = false;
+        audio.play(Sfx.doorLocked);
         _say("IT'S LOCKED.", LineKind.sys);
         _later(1100, () {
           stage = 2;
@@ -487,6 +572,7 @@ class GameController extends ChangeNotifier {
         scene
           ..doorOpen = true
           ..doorHint = false;
+        audio.play(Sfx.doorOpen);
         _say('GO THROUGH. TRUST ME.', LineKind.cmd);
       case Step.through:
         step = Step.wait;
@@ -501,6 +587,7 @@ class GameController extends ChangeNotifier {
       case _ when stage == 4:
         _say('Not this time.', LineKind.voice);
       case Step.drawer || Step.key:
+        audio.play(Sfx.doorLocked);
         _say('LOCKED.', LineKind.sys);
       default:
         break;
@@ -545,6 +632,7 @@ class GameController extends ChangeNotifier {
   void onCrack() {
     if (busy || stage != 4) return;
     _walkTo(const Tile(0, 1), (_) {
+      audio.play(Sfx.crack);
       _transition(
         StageTransition(TransitionKind.light, '05 / TRUTH', origin: crackLight),
         onCovered: () {
@@ -572,6 +660,7 @@ class GameController extends ChangeNotifier {
 
   void dial(int k, int delta) {
     dials = [...dials]..[k] = (dials[k] + delta + 10) % 10;
+    audio.play(Sfx.dial, rate: delta > 0 ? 1.08 : .94);
     puzzleStatus = PuzzleStatus.idle;
     notifyListeners();
   }
@@ -580,10 +669,12 @@ class GameController extends ChangeNotifier {
     if (puzzleStatus == PuzzleStatus.open) return;
     if (listEquals(dials, realCode)) {
       puzzleStatus = PuzzleStatus.open;
+      audio.play(Sfx.unlock);
       step = Step.wait;
       _later(1100, () {
         overlay = GameOverlay.none;
         scene.drawerOpen = true;
+        audio.play(Sfx.drawerOpen);
         _say('...', LineKind.sys);
         _later(1300, () {
           _say('I LIED.', LineKind.lie);
@@ -597,6 +688,7 @@ class GameController extends ChangeNotifier {
     } else {
       puzzleStatus =
           listEquals(dials, toldCode) ? PuzzleStatus.lied : PuzzleStatus.wrong;
+      audio.play(puzzleStatus == PuzzleStatus.lied ? Sfx.wrongLied : Sfx.wrong);
       if (puzzleStatus == PuzzleStatus.lied) _buzz();
     }
     notifyListeners();
@@ -624,6 +716,7 @@ class GameController extends ChangeNotifier {
       ..keyOnFloor = true
       ..highlights = const [TileHighlight(Tile(5, 5), C.warn)];
     _say("DON'T GO THERE.", LineKind.cmd);
+    _syncMusic();
     notifyListeners();
   }
 
@@ -642,10 +735,18 @@ class GameController extends ChangeNotifier {
     if (!canPause || paused) return;
     paused = true;
     pauses++;
+    audio
+      ..play(Sfx.pause)
+      ..duck(true);
     notifyListeners();
   }
 
   void resume() {
+    if (paused) {
+      audio
+        ..play(Sfx.resume)
+        ..duck(false);
+    }
     paused = false;
     _idleMs = 0;
     _sw?.reset();
@@ -662,6 +763,7 @@ class GameController extends ChangeNotifier {
     overlay = ending;
     settings.markEnding(ending.name);
     if (ending == GameOverlay.endTrust) {
+      audio.play(Sfx.good); // "YOU DID EVERYTHING I ASKED."
       _setRoom(normal: true);
       scene
         ..player = const Tile(1, 4)
@@ -669,6 +771,7 @@ class GameController extends ChangeNotifier {
       scene.onTile = scene.onDoor = scene.onCabinet = scene.onCrack = null;
       _later(trustLoopMs, () => _reset(1));
     } else if (ending == GameOverlay.endDont) {
+      audio.play(Sfx.doorOpen);
       _setRoom(normal: true);
       scene
         ..noCabinet = true
@@ -681,5 +784,6 @@ class GameController extends ChangeNotifier {
         ..noWalls = true
         ..player = const Tile(2, 2);
     }
+    _syncMusic();
   }
 }
