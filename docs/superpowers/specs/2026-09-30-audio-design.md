@@ -159,18 +159,24 @@ play so repeats don't sound identical.
   }
   ```
 
-- `soloud_audio.dart` — `SoloudAudio` on `flutter_soloud`:
-  - `start()` runs in the background after `runApp` (no startup delay):
-    init engine (max voices 32, global limiter), create music + SFX buses,
-    load SFX in memory and music as streams (`LoadMode.disk`). Calls made
-    before loading finishes are dropped, except `mood`, which is remembered
-    and applied once ready.
+- `audio_director.dart` — `AudioDirector implements GameAudio`: all of the
+  audio logic, talking to the engine only through an `AudioBackend` port,
+  so it is unit-tested with a fake backend:
+  - `start()` runs in the background after `runApp` (no startup delay).
+    Calls made before the engine is ready are dropped, except `mood`, which
+    is remembered and applied once ready.
   - Any engine/load failure is caught and logged; the game continues silent.
+  - Crossfades, tape-stop, hiccups, cover/uncover, ducking, cooldowns and
+    play-rate variation.
   - Listens to `SettingsStore`: bus volumes; plays `deny` when `assist`
     flips back on.
-  - Uses only volume/speed faders and buses (no per-sound filters, which web
-    doesn't support).
-  - Watches app lifecycle (`AppLifecycleListener`) to stop/start the device.
+  - `suspend()` / `resume()` for the app lifecycle (`AppLifecycleListener`
+    in `main.dart`).
+- `soloud_backend.dart` — `SoloudBackend implements AudioBackend`, a thin
+  `flutter_soloud` adapter: init engine (max voices 32, global limiter),
+  music + SFX buses, SFX loaded in memory and music streamed
+  (`LoadMode.disk`). Only volume/speed faders and buses (no per-sound
+  filters, which web doesn't support); device stop/start for lifecycle.
 
 ### Game wiring
 
@@ -192,7 +198,7 @@ play so repeats don't sound identical.
   the overlay (replacing its inline calculation, same result) and the
   controller's tick sound.
 - Screens:
-  - `main.dart` creates `SoloudAudio` and wraps the app in `AudioScope`;
+  - `main.dart` creates `AudioDirector(SoloudBackend(), settings)` and wraps the app in `AudioScope`;
     `DontTrustTheGame` takes an optional `audio` (default `SilentAudio`), so
     existing widget tests are unchanged.
   - `MainMenuScreen` sets `trust`; `BootScreen` sets `silence` and plays boot
