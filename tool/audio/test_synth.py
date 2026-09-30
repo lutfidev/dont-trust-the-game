@@ -6,6 +6,7 @@ import unittest
 
 import numpy as np
 
+import music
 import sfx
 import synth as s
 
@@ -64,6 +65,19 @@ class SfxTest(unittest.TestCase):
 
     def test_there_are_28_effects(self):
         self.assertEqual(len(sfx.SFX), 28)
+
+
+class MusicTest(unittest.TestCase):
+    def test_loops_are_exact_cycles(self):
+        self.assertEqual(music.trust().shape, (2, s.n_of(8 * 4 * 60 / 72)))
+        self.assertEqual(music.watching().shape, (2, s.n_of(8 * 4 * 60 / 60)))
+        self.assertEqual(music.room().shape, (2, s.n_of(16)))
+
+    def test_the_lie_changes_the_phrase_endings(self):
+        lied = dict((b, m) for b, m, _ in music.lied_melody())
+        self.assertEqual(lied[12], 77)  # E5 → F5
+        self.assertEqual(lied[30], 75)  # D5 → D#5
+        self.assertEqual(lied[0], 78)   # everything else unchanged
 
 
 if __name__ == '__main__':
