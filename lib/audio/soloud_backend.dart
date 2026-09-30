@@ -106,8 +106,10 @@ class SoloudBackend implements AudioBackend {
     }
   }
 
+  /// Forced: without it this is a no-op while any voice plays, and the two
+  /// buses always do. The director plays nothing new until [resume].
   @override
-  Future<void> suspend() => _soloud.stopAudioDevice();
+  Future<void> suspend() => _soloud.stopAudioDevice(force: true);
 
   @override
   Future<void> resume() => _soloud.startAudioDevice();

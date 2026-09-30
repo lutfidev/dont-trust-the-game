@@ -130,7 +130,8 @@ void main() {
     final d = await ready(Mood.room);
     d.mood(Mood.truthEnd);
     expect(fake.log, ['fade #1 0.00 1200', 'stop #1 1200']);
-    expect(scheduled.single.$1, const Duration(milliseconds: 1500));
+    // ~1.5 s of real silence after the 1.2 s fade-out, then the chord.
+    expect(scheduled.single.$1, const Duration(milliseconds: 2700));
     scheduled.single.$2();
     expect(fake.log.last, 'start truthEnd 1.00 #2');
   });
@@ -191,5 +192,54 @@ void main() {
     await d.suspend();
     await d.resume();
     expect(fake.log.sublist(fake.log.length - 2), ['suspend', 'resume']);
+  });
+  test('spamming a button does not stack its sound', () async {
+    final d = await ready();
+    for (final s in [Sfx.wrong, Sfx.wrongLied, Sfx.doorLocked, Sfx.voice, Sfx.pause, Sfx.resume]) {
+      clock += 5000;
+      d.play(s);
+      clock += 100;
+      d.play(s); // a second tap 100ms later
+      expect(fake.log.where((l) => l.startsWith('sfx ${s.name} ')), hasLength(1), reason: s.name);
+    }
+  });
+
+  test('while the app is hidden, cues stay silent and the mood waits for resume', () async {
+    final d = await ready();
+    await d.suspend();
+    expect(fake.log, ['suspend']);
+    fake.log.clear();
+    d
+      ..play(Sfx.step)
+      ..mood(Mood.lie);
+    expect(fake.log, isEmpty);
+    await d.resume();
+    expect(fake.log, [
+      'resume',
+      'fade #1 0.00 1200',
+      'stop #1 1200',
+      'start lie 0.00 #2',
+      'fade #2 1.00 1800',
+    ]);
+  });
+
+  test('the true-ending chord waits until the app is back', () async {
+    final d = await ready(Mood.room);
+    d.mood(Mood.truthEnd);
+    await d.suspend();
+    scheduled.single.$2(); // the delay ends while hidden
+    expect(fake.log.where((l) => l.startsWith('start truthEnd')), isEmpty);
+    await d.resume();
+    scheduled.last.$2();
+    expect(fake.log.last, 'start truthEnd 1.00 #2');
+  });
+
+  test('hidden while still loading: the engine is silenced as soon as it is up', () async {
+    final d = director()..mood(Mood.trust);
+    await d.suspend();
+    await d.start();
+    expect(fake.log, ['init', 'bus music 0.25 sfx 0.50', 'suspend']);
+    await d.resume();
+    expect(fake.log.sublist(3), ['resume', 'start trust 0.00 #1', 'fade #1 1.00 2500']);
   });
 }

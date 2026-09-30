@@ -34,7 +34,9 @@ typedef Schedule = void Function(Duration delay, VoidCallback run);
 ///
 /// Until [start] succeeds nothing is sent to the engine; the wanted mood is
 /// remembered and started once it is ready. If the engine fails, the game
-/// simply stays silent.
+/// simply stays silent. While the app is hidden ([suspend]) the device is
+/// stopped and nothing new plays; the game keeps running, so the mood it
+/// asks for meanwhile starts on [resume].
 class AudioDirector implements GameAudio {
   AudioDirector(this._backend, this._settings,
       {math.Random? random, int Function()? now, Schedule? schedule})
@@ -51,9 +53,11 @@ class AudioDirector implements GameAudio {
   static const fadeOut = Duration(milliseconds: 1200);
   static const duckLevel = .3;
   static const duckTime = Duration(milliseconds: 250);
-  static const truthEndDelay = Duration(milliseconds: 1500);
+  /// Silence between the fade-out and the true-ending chord.
+  static const truthEndSilence = Duration(milliseconds: 1500);
 
-  bool _ready = false, _covered = false, _ducked = false, _assist = true;
+  bool _ready = false, _covered = false, _ducked = false, _suspended = false;
+  bool _assist = true;
 
   /// The mood the game asked for, and the one actually sounding.
   Mood _want = Mood.silence, _playing = Mood.silence;
@@ -81,11 +85,28 @@ class AudioDirector implements GameAudio {
     _assist = _settings.assist;
     _settings.addListener(_onSettings);
     _applyBus();
-    _apply();
+    if (_suspended) {
+      // Hidden while loading: the engine just started its device.
+      await _device(_backend.suspend);
+    } else {
+      _apply();
+    }
   }
 
-  Future<void> suspend() => _device(_backend.suspend);
-  Future<void> resume() => _device(_backend.resume);
+  /// The app is hidden: stop the device, play nothing new.
+  Future<void> suspend() async {
+    if (_suspended) return;
+    _suspended = true;
+    await _device(_backend.suspend);
+  }
+
+  /// The app is back: restart the device and catch up with the mood.
+  Future<void> resume() async {
+    if (!_suspended) return;
+    _suspended = false;
+    await _device(_backend.resume);
+    _apply();
+  }
 
   Future<void> _device(Future<void> Function() op) async {
     if (!_ready) return;
@@ -98,7 +119,7 @@ class AudioDirector implements GameAudio {
 
   @override
   void play(Sfx sfx, {double rate = 1}) {
-    if (!_ready || _settings.sfx == 0) return;
+    if (!_ready || _suspended || _settings.sfx == 0) return;
     final now = _now(), last = _last[sfx];
     if (last != null && now - last < sfx.cooldownMs) return;
     _last[sfx] = now;
@@ -112,7 +133,7 @@ class AudioDirector implements GameAudio {
   }
 
   void _apply({bool cut = false}) {
-    if (!_ready || _covered || _want == _playing) return;
+    if (!_ready || _covered || _suspended || _want == _playing) return;
     _stopVoice(cut ? Duration.zero : fadeOut);
     final m = _playing = _want;
     final gen = ++_generation;
@@ -120,8 +141,13 @@ class AudioDirector implements GameAudio {
       case Mood.silence:
         break;
       case Mood.truthEnd:
-        _schedule(truthEndDelay, () {
-          if (gen == _generation) _voice = _backend.startMusic(m, volume: 1);
+        _schedule(fadeOut + truthEndSilence, () {
+          if (gen != _generation) return;
+          if (_suspended) {
+            _playing = Mood.silence; // start it on resume instead
+          } else {
+            _voice = _backend.startMusic(m, volume: 1);
+          }
         });
       default:
         final v = _voice = _backend.startMusic(m, volume: cut ? 1 : 0);
