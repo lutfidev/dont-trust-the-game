@@ -59,8 +59,9 @@ class StageTransition {
     return ms <= 0 ? 0 : math.min(card.length, ms ~/ 30);
   }
 
-  /// Length of the reveal animation at the end (the painters in
-  /// transition_overlay.dart).
+  /// How long the screen takes to open up again at the end: the tear's bands
+  /// pull back quicker than the light (or the reduced fade) fades. Both the
+  /// overlay's painters and the audio's reveal cue go by this.
   int outMs({required bool reduced}) =>
       kind == TransitionKind.tear && !reduced ? 300 : 500;
 }
@@ -100,6 +101,10 @@ class GameController extends ChangeNotifier {
   static const realCode = [4, 0, 7, 1];
   static const toldCode = [1, 2, 3, 4];
 
+  /// Light sources for the transitions, in room-canvas coordinates.
+  static final doorLight = Iso.p(4.25, 0, 35);
+  static final crackLight = Iso.p(0, 1.66, 52);
+
   late int stage;
   late Step step;
   final List<LogLine> log = [];
@@ -123,6 +128,7 @@ class GameController extends ChangeNotifier {
 
   Timer? _clock;
   Stopwatch? _sw;
+  bool _stopped = false;
 
   LogLine get current => log.last;
   bool get typing => typed < current.text.length;
@@ -143,9 +149,16 @@ class GameController extends ChangeNotifier {
     });
   }
 
+  /// Freezes the game for good (leaving for the menu): no more beats, so no
+  /// more cues either. The audio belongs to the menu from here on.
+  void stop() {
+    _stopped = true;
+    _clock?.cancel();
+  }
+
   @override
   void dispose() {
-    _clock?.cancel();
+    stop();
     transition.dispose();
     transitionClock.dispose();
     super.dispose();
@@ -154,6 +167,9 @@ class GameController extends ChangeNotifier {
   // ---------------------------------------------------------------- setup
 
   void _reset(int s) {
+    // A restart can come mid-pause or mid-transition: what those asked of the
+    // audio is undone at the end, once the new stage has picked its music.
+    final ducked = paused, covered = transition.value != null;
     _tasks.clear();
     _walk.clear();
     _walkThen = null;
@@ -218,6 +234,8 @@ class GameController extends ChangeNotifier {
         ]);
     }
     _syncRoom();
+    if (ducked) audio.duck(false);
+    if (covered) audio.uncover();
   }
 
   void _replaceLog(List<LogLine> lines) {
@@ -287,7 +305,7 @@ class GameController extends ChangeNotifier {
   // ---------------------------------------------------------------- clock
 
   void tick(int ms) {
-    if (paused) return;
+    if (paused || _stopped) return;
     var changed = false;
 
     if (typing) {
@@ -336,8 +354,8 @@ class GameController extends ChangeNotifier {
     glitch.reduced = settings.reduceGlitch || systemReduceMotion;
     final wasBursting = glitch.bursting;
     if (glitch.tick(ms)) changed = true;
-    // Only bursts the director starts on its own make a sound; forced ones
-    // (transitions, the lie) have their own.
+    // Only bursts the glitch director starts on its own make a sound; forced
+    // ones (transitions, the lie) have their own.
     if (!wasBursting && glitch.bursting) {
       audio
         ..play(glitch.heavy ? Sfx.glitchHeavy : Sfx.glitchLight)
@@ -726,10 +744,6 @@ class GameController extends ChangeNotifier {
       stage < 5 &&
       transition.value == null &&
       (overlay == GameOverlay.none || overlay == GameOverlay.log);
-
-  /// Light sources for the transitions, in room-canvas coordinates.
-  static final doorLight = Iso.p(4.25, 0, 35);
-  static final crackLight = Iso.p(0, 1.66, 52);
 
   void pause() {
     if (!canPause || paused) return;

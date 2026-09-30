@@ -30,8 +30,7 @@ class TransitionOverlay extends StatelessWidget {
           builder: (context, ms, _) {
             final light = t.kind == TransitionKind.light;
             final reduced = g.glitch.reduced;
-            final hold = ms >= t.coverMs &&
-                ms < t.totalMs - (reduced || light ? _FadePainter.fadeOutMs : 300);
+            final hold = ms >= t.coverMs && ms < t.totalMs - t.outMs(reduced: reduced);
             final chars = t.cardChars;
             final ink = light ? C.void_ : C.ink;
             return GestureDetector(
@@ -75,10 +74,9 @@ class _FadePainter extends CustomPainter {
   final int ms;
   final Color color;
 
-  static const fadeOutMs = 500;
-
   @override
   void paint(Canvas canvas, Size size) {
+    final fadeOutMs = t.outMs(reduced: true);
     final out = t.totalMs - fadeOutMs;
     final a = ms < t.coverMs
         ? _ease(ms / t.coverMs)
@@ -98,10 +96,10 @@ class _TearPainter extends CustomPainter {
   final int ms;
 
   static const bands = 16;
-  static const revealMs = 300;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final revealMs = t.outMs(reduced: false);
     final bh = size.height / bands;
     final rnd = math.Random(7);
     final closing = ms < t.coverMs;
@@ -160,8 +158,6 @@ class _LightPainter extends CustomPainter {
   final int ms;
   final Offset origin;
 
-  static const fadeMs = 500;
-
   @override
   void paint(Canvas canvas, Size size) {
     final far = [
@@ -192,6 +188,7 @@ class _LightPainter extends CustomPainter {
       );
       return;
     }
+    final fadeMs = t.outMs(reduced: false);
     final fadeStart = t.totalMs - fadeMs;
     final a = ms < fadeStart ? 1.0 : 1 - _ease((ms - fadeStart) / fadeMs);
     canvas.drawRect(Offset.zero & size, Paint()..color = C.ink.withValues(alpha: a));

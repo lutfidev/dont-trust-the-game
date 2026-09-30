@@ -1,6 +1,7 @@
 import 'package:dont_trust_the_game/audio/cues.dart';
 import 'package:dont_trust_the_game/audio/game_audio.dart';
 import 'package:dont_trust_the_game/main.dart';
+import 'package:dont_trust_the_game/screens/game_screen.dart';
 import 'package:dont_trust_the_game/settings.dart';
 import 'package:dont_trust_the_game/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -110,9 +111,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('[ MAIN MENU ]'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    // The menu has its music as soon as leaving starts, while the game is
+    // still fading out.
+    expect(find.byType(GameScreen), findsOneWidget);
     final left = a.calls.sublist(a.calls.lastIndexOf('duck true'));
     expect(left, containsAllInOrder(['mood trust', 'uncover', 'duck false']));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(GameScreen), findsNothing);
+    expect(a.calls.sublist(a.calls.lastIndexOf('duck true')), left, reason: 'said once');
   });
 
   testWidgets('backing out of the boot screen brings the lullaby back', (tester) async {

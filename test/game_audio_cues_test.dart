@@ -165,6 +165,34 @@ void main() {
     expect(a.played, isNot(contains(Sfx.light)));
   });
 
+  test('a stopped game sends no more cues, even with a stage about to be revealed', () {
+    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
+    g.onDoor();
+    run(g, 1500);
+    g.onDoor(); // through: the light transition starts
+    run(g, 600); // covered, stage 04 waiting underneath
+    a.clear();
+    g.stop(); // leaving for the menu
+    run(g, 3000);
+    expect(a.calls, isEmpty);
+  });
+
+  test('restarting hands back what a pause or a transition took from the music', () {
+    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
+    g.onDoor();
+    run(g, 1500);
+    g.onDoor();
+    run(g, 600); // covered
+    a.clear();
+    g.restart();
+    expect(a.calls, ['mood trust', 'uncover']);
+
+    g.pause();
+    a.clear();
+    g.restart();
+    expect(a.calls, ['mood trust', 'duck false']);
+  });
+
   test('pause ducks the music and resume brings it back', () {
     final g = GameController(settings, audio: a);
     a.clear(); // the constructor already asked for the lullaby
