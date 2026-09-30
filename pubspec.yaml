@@ -62,6 +62,8 @@ flutter:
 
   assets:
     - assets/images/sprites/
+    - assets/audio/sfx/
+    - assets/audio/music/
 
   fonts:
     - family: IBMPlexMono
