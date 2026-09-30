@@ -277,7 +277,9 @@ def wrap_add(buf, n):
 
 def wrap_xfade(buf, n, xfade):
     """Loops continuous material (noise beds, drones): the audio after n
-    samples is crossfaded (equal power) into the start. Needs n + xfade."""
+    samples is crossfaded (equal power) into the start. Needs n + xfade.
+    Equal power suits uncorrelated material; anything that repeats exactly
+    every n samples comes out up to 3 dB louder, so add it after instead."""
     out = buf[..., :n].copy()
     k = n_of(xfade)
     t = np.linspace(0, 1, k)

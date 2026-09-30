@@ -73,6 +73,13 @@ class MusicTest(unittest.TestCase):
         self.assertEqual(music.watching().shape, (2, s.n_of(8 * 4 * 60 / 60)))
         self.assertEqual(music.room().shape, (2, s.n_of(16)))
 
+    def test_the_room_does_not_swell_at_the_loop_point(self):
+        x = music.room()
+        # The room breathes every 8 s: the crossfade at 0-2 s and 8-10 s sit
+        # at the same point of the breath, so they should be equally loud.
+        seam = s.rms_db(x[:, :s.n_of(2)]) - s.rms_db(x[:, s.n_of(8):s.n_of(10)])
+        self.assertLess(abs(seam), 0.5)
+
     def test_the_lie_changes_the_phrase_endings(self):
         lied = dict((b, m) for b, m, _ in music.lied_melody())
         self.assertEqual(lied[12], 77)  # E5 → F5
