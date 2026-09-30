@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'audio/game_audio.dart';
 import 'screens/main_menu.dart';
 import 'settings.dart';
 import 'theme.dart';
@@ -26,23 +27,28 @@ class AppScope extends InheritedNotifier<SettingsStore> {
 }
 
 class DontTrustTheGame extends StatelessWidget {
-  const DontTrustTheGame({super.key, required this.settings});
+  const DontTrustTheGame(
+      {super.key, required this.settings, this.audio = const SilentAudio()});
   final SettingsStore settings;
+  final GameAudio audio;
 
   @override
   Widget build(BuildContext context) {
-    return AppScope(
-      settings: settings,
-      child: MaterialApp(
-        title: "Don't Trust The Game",
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: C.void_,
-          fontFamily: kMono,
-          splashFactory: NoSplash.splashFactory,
+    return AudioScope(
+      audio: audio,
+      child: AppScope(
+        settings: settings,
+        child: MaterialApp(
+          title: "Don't Trust The Game",
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: C.void_,
+            fontFamily: kMono,
+            splashFactory: NoSplash.splashFactory,
+          ),
+          home: const MainMenuScreen(),
         ),
-        home: const MainMenuScreen(),
       ),
     );
   }

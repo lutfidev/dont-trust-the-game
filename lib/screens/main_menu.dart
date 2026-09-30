@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../audio/cues.dart';
+import '../audio/game_audio.dart';
 import '../room/room_scene.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -20,6 +22,12 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   final _scene = RoomScene(player: const Tile(2, 3), doorHint: true);
+
+  @override
+  void initState() {
+    super.initState();
+    AudioScope.of(context).mood(Mood.trust);
+  }
 
   @override
   Widget build(BuildContext context) {

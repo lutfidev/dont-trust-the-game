@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../audio/cues.dart';
+import '../audio/game_audio.dart';
 import '../game/game_controller.dart';
 import '../game/overlays.dart';
 import '../game/transition_overlay.dart';
@@ -23,11 +25,13 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   GameController? _game;
+  late final GameAudio _audio = AudioScope.of(context);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _game ??= GameController(AppScope.of(context), startStage: GameScreen.startStage)
+    _game ??= GameController(AppScope.of(context),
+        startStage: GameScreen.startStage, audio: _audio)
       ..start();
     _game!.systemReduceMotion = MediaQuery.disableAnimationsOf(context);
   }
@@ -35,6 +39,11 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _game?.dispose();
+    // Back to the menu: its lullaby, un-ducked, even if we left mid-transition.
+    _audio
+      ..mood(Mood.trust)
+      ..uncover()
+      ..duck(false);
     super.dispose();
   }
 
