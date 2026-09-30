@@ -6,6 +6,7 @@ import unittest
 
 import numpy as np
 
+import sfx
 import synth as s
 
 
@@ -50,6 +51,19 @@ class SynthTest(unittest.TestCase):
         self.assertAlmostEqual(buf[0, 0], np.sqrt(2))
         self.assertAlmostEqual(buf[1, 0], 0.0)
         self.assertEqual(buf[0, 4], 0.0)
+
+
+class SfxTest(unittest.TestCase):
+    def test_every_effect_renders_mono_finite_and_audible(self):
+        for name, (render, _peak) in sfx.SFX.items():
+            with self.subTest(name):
+                x = render()
+                self.assertEqual(x.ndim, 1)
+                self.assertTrue(np.all(np.isfinite(x)))
+                self.assertGreater(s.peak_db(x), -60)
+
+    def test_there_are_28_effects(self):
+        self.assertEqual(len(sfx.SFX), 28)
 
 
 if __name__ == '__main__':
