@@ -49,6 +49,9 @@ class GlitchDirector {
   Unease get unease => _unease;
   bool get bursting => _burstLeft > 0;
 
+  /// Whether the current (or last) burst is a heavy one.
+  bool get heavy => _heavy;
+
   bool _reduced = false;
 
   /// Reduce-glitch accessibility mode: no bursts (no flicker, jitter,

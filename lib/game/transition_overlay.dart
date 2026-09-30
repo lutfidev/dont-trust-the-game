@@ -32,8 +32,7 @@ class TransitionOverlay extends StatelessWidget {
             final reduced = g.glitch.reduced;
             final hold = ms >= t.coverMs &&
                 ms < t.totalMs - (reduced || light ? _FadePainter.fadeOutMs : 300);
-            final typedMs = ms - t.coverMs - 120;
-            final chars = typedMs <= 0 ? 0 : math.min(t.card.length, typedMs ~/ 30);
+            final chars = t.cardChars;
             final ink = light ? C.void_ : C.ink;
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
