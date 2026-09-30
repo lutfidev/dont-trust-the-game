@@ -172,8 +172,10 @@ def room():
     t = times(m)
     breath = 0.75 + 0.25 * np.sin(2 * np.pi * 2 * t / L)
     hum = (sine(55, m) + 0.4 * sine(110, m) + 0.2 * sine(165, m) + 0.08 * sine(220, m)) * breath * 0.5
-    air = [hp(lp(brown(m, 40 + ch), 300), 30) * 0.6 for ch in range(2)]
-    return wrap_xfade(np.vstack(air) + hum, n, 2.0)
+    air = np.vstack([hp(lp(brown(m, 40 + ch), 300), 30) * 0.6 for ch in range(2)])
+    # The hum and its breathing repeat exactly every L seconds, so only the
+    # noise needs the crossfade: equal power on the hum would swell it 3 dB.
+    return wrap_xfade(air, n, 2.0) + hum[:n]
 
 
 def exit_():

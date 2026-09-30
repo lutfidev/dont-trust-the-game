@@ -11,7 +11,7 @@ import 'game_audio.dart';
 /// out by [startMusic].
 abstract interface class AudioBackend {
   /// Starts the engine and loads every [Sfx] and [Mood] asset. Throws on
-  /// failure.
+  /// failure, leaving the engine shut down.
   Future<void> init();
   void setBusVolumes({required double music, required double sfx});
   void fadeMusicBus(double to, Duration time);
@@ -33,10 +33,11 @@ typedef Schedule = void Function(Duration delay, VoidCallback run);
 /// hiccups, ducking, cooldowns and the MUSIC / SFX settings.
 ///
 /// Until [start] succeeds nothing is sent to the engine; the wanted mood is
-/// remembered and started once it is ready. If the engine fails, the game
-/// simply stays silent. While the app is hidden ([suspend]) the device is
-/// stopped and nothing new plays; the game keeps running, so the mood it
-/// asks for meanwhile starts on [resume].
+/// remembered and started once it is ready. If the engine fails to start, the
+/// game simply stays silent; an engine call that throws later costs only that
+/// sound. While the app is hidden ([suspend]) the device is stopped and
+/// nothing new plays; the game keeps running, so the mood it asks for
+/// meanwhile starts on [resume].
 class AudioDirector implements GameAudio {
   AudioDirector(this._backend, this._settings,
       {math.Random? random, int Function()? now, Schedule? schedule})
@@ -53,6 +54,7 @@ class AudioDirector implements GameAudio {
   static const fadeOut = Duration(milliseconds: 1200);
   static const duckLevel = .3;
   static const duckTime = Duration(milliseconds: 250);
+
   /// Silence between the fade-out and the true-ending chord.
   static const truthEndSilence = Duration(milliseconds: 1500);
 
@@ -117,13 +119,25 @@ class AudioDirector implements GameAudio {
     }
   }
 
+  /// Makes one engine call. If it throws, the error is logged and the call
+  /// skipped (null): a misbehaving engine may cost a sound, never the game.
+  T? _engine<T>(T Function() call) {
+    try {
+      return call();
+    } catch (e) {
+      debugPrint('Audio: $e');
+      return null;
+    }
+  }
+
   @override
   void play(Sfx sfx, {double rate = 1}) {
     if (!_ready || _suspended || _settings.sfx == 0) return;
     final now = _now(), last = _last[sfx];
     if (last != null && now - last < sfx.cooldownMs) return;
     _last[sfx] = now;
-    _backend.playSfx(sfx, rate: rate * (1 + (_rnd.nextDouble() * 2 - 1) * sfx.vary));
+    final r = rate * (1 + (_rnd.nextDouble() * 2 - 1) * sfx.vary);
+    _engine(() => _backend.playSfx(sfx, rate: r));
   }
 
   @override
@@ -146,12 +160,14 @@ class AudioDirector implements GameAudio {
           if (_suspended) {
             _playing = Mood.silence; // start it on resume instead
           } else {
-            _voice = _backend.startMusic(m, volume: 1);
+            _voice = _engine(() => _backend.startMusic(m, volume: 1));
           }
         });
       default:
-        final v = _voice = _backend.startMusic(m, volume: cut ? 1 : 0);
-        if (!cut) _backend.fadeVolume(v, 1, Duration(milliseconds: m.fadeInMs));
+        final v = _voice = _engine(() => _backend.startMusic(m, volume: cut ? 1 : 0));
+        if (v != null && !cut) {
+          _engine(() => _backend.fadeVolume(v, 1, Duration(milliseconds: m.fadeInMs)));
+        }
     }
   }
 
@@ -159,8 +175,8 @@ class AudioDirector implements GameAudio {
     final v = _voice;
     if (v == null) return;
     _voice = null;
-    if (fade > Duration.zero) _backend.fadeVolume(v, 0, fade);
-    _backend.stopAfter(v, fade);
+    if (fade > Duration.zero) _engine(() => _backend.fadeVolume(v, 0, fade));
+    _engine(() => _backend.stopAfter(v, fade));
   }
 
   @override
@@ -170,19 +186,17 @@ class AudioDirector implements GameAudio {
     _voice = null;
     _generation++;
     _playing = Mood.silence;
-    _backend
-      ..fadeSpeed(v, .05, const Duration(milliseconds: 900))
-      ..fadeVolume(v, 0, const Duration(milliseconds: 1000))
-      ..stopAfter(v, const Duration(milliseconds: 1000));
+    _engine(() => _backend.fadeSpeed(v, .05, const Duration(milliseconds: 900)));
+    _engine(() => _backend.fadeVolume(v, 0, const Duration(milliseconds: 1000)));
+    _engine(() => _backend.stopAfter(v, const Duration(milliseconds: 1000)));
   }
 
   @override
   void hiccup({required bool heavy}) {
     final v = _voice;
     if (v == null || _playing == Mood.truthEnd) return;
-    _backend
-      ..setSpeed(v, heavy ? .88 : .95)
-      ..fadeSpeed(v, 1, const Duration(milliseconds: 180));
+    _engine(() => _backend.setSpeed(v, heavy ? .88 : .95));
+    _engine(() => _backend.fadeSpeed(v, 1, const Duration(milliseconds: 180)));
   }
 
   @override
@@ -204,13 +218,13 @@ class AudioDirector implements GameAudio {
   void duck(bool on) {
     if (_ducked == on) return;
     _ducked = on;
-    if (_ready) _backend.fadeMusicBus(_musicBus, duckTime);
+    if (_ready) _engine(() => _backend.fadeMusicBus(_musicBus, duckTime));
   }
 
   double get _musicBus => volumeGain(_settings.music) * (_ducked ? duckLevel : 1);
 
-  void _applyBus() =>
-      _backend.setBusVolumes(music: _musicBus, sfx: volumeGain(_settings.sfx));
+  void _applyBus() => _engine(() =>
+      _backend.setBusVolumes(music: _musicBus, sfx: volumeGain(_settings.sfx)));
 
   void _onSettings() {
     _applyBus();

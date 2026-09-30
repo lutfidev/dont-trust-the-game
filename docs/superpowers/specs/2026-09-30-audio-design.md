@@ -166,6 +166,8 @@ play so repeats don't sound identical.
     Calls made before the engine is ready are dropped, except `mood`, which
     is remembered and applied once ready.
   - Any engine/load failure is caught and logged; the game continues silent.
+    Every later engine call is guarded on its own: one that throws costs
+    only that sound.
   - Crossfades, tape-stop, hiccups, cover/uncover, ducking, cooldowns and
     play-rate variation.
   - Listens to `SettingsStore`: bus volumes; plays `deny` when `assist`
@@ -174,9 +176,12 @@ play so repeats don't sound identical.
     in `main.dart`).
 - `soloud_backend.dart` — `SoloudBackend implements AudioBackend`, a thin
   `flutter_soloud` adapter: init engine (max voices 32, global limiter),
-  music + SFX buses, SFX loaded in memory and music streamed
-  (`LoadMode.disk`). Only volume/speed faders and buses (no per-sound
-  filters, which web doesn't support); device stop/start for lifecycle.
+  music + SFX buses. All files are fetched in parallel, then handed to
+  `loadMem`: SFX decoded in memory, music kept compressed in memory and
+  streamed from there (`LoadMode.disk`; no temporary files the OS could
+  clear). If loading fails, the engine is shut down again. Only
+  volume/speed faders and buses (no per-sound filters, which web doesn't
+  support); device stop/start for lifecycle.
 
 ### Game wiring
 

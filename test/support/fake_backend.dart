@@ -5,9 +5,17 @@ import 'package:dont_trust_the_game/audio/cues.dart';
 class FakeBackend implements AudioBackend {
   final log = <String>[];
   bool failInit = false;
+
+  /// Every call after [init] throws, like an engine that went away.
+  bool failCalls = false;
   int _ids = 0;
 
   String _f(double v) => v.toStringAsFixed(2);
+
+  void _call(String entry) {
+    if (failCalls) throw StateError('engine gone: $entry');
+    log.add(entry);
+  }
 
   @override
   Future<void> init() async {
@@ -17,30 +25,30 @@ class FakeBackend implements AudioBackend {
 
   @override
   void setBusVolumes({required double music, required double sfx}) =>
-      log.add('bus music ${_f(music)} sfx ${_f(sfx)}');
+      _call('bus music ${_f(music)} sfx ${_f(sfx)}');
   @override
   void fadeMusicBus(double to, Duration time) =>
-      log.add('busfade ${_f(to)} ${time.inMilliseconds}');
+      _call('busfade ${_f(to)} ${time.inMilliseconds}');
   @override
-  void playSfx(Sfx sfx, {required double rate}) => log.add('sfx ${sfx.name} ${_f(rate)}');
+  void playSfx(Sfx sfx, {required double rate}) => _call('sfx ${sfx.name} ${_f(rate)}');
   @override
   int startMusic(Mood mood, {required double volume}) {
-    log.add('start ${mood.name} ${_f(volume)} #${++_ids}');
-    return _ids;
+    _call('start ${mood.name} ${_f(volume)} #${_ids + 1}');
+    return ++_ids;
   }
 
   @override
   void fadeVolume(int voice, double to, Duration time) =>
-      log.add('fade #$voice ${_f(to)} ${time.inMilliseconds}');
+      _call('fade #$voice ${_f(to)} ${time.inMilliseconds}');
   @override
-  void setSpeed(int voice, double speed) => log.add('speed #$voice ${_f(speed)}');
+  void setSpeed(int voice, double speed) => _call('speed #$voice ${_f(speed)}');
   @override
   void fadeSpeed(int voice, double to, Duration time) =>
-      log.add('fadespeed #$voice ${_f(to)} ${time.inMilliseconds}');
+      _call('fadespeed #$voice ${_f(to)} ${time.inMilliseconds}');
   @override
-  void stopAfter(int voice, Duration time) => log.add('stop #$voice ${time.inMilliseconds}');
+  void stopAfter(int voice, Duration time) => _call('stop #$voice ${time.inMilliseconds}');
   @override
-  Future<void> suspend() async => log.add('suspend');
+  Future<void> suspend() async => _call('suspend');
   @override
-  Future<void> resume() async => log.add('resume');
+  Future<void> resume() async => _call('resume');
 }

@@ -26,6 +26,7 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> {
   GameController? _game;
   late final GameAudio _audio = AudioScope.of(context);
+  bool _left = false;
 
   @override
   void didChangeDependencies() {
@@ -38,16 +39,29 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    _leave();
     _game?.dispose();
-    // Back to the menu: its lullaby, un-ducked, even if we left mid-transition.
+    super.dispose();
+  }
+
+  void _toMenu() {
+    _leave();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  /// Hands the audio back to the menu: its lullaby, un-ducked, even if we
+  /// left mid-transition. Done as leaving starts, not in [dispose]: the game
+  /// would otherwise keep running through the route's exit animation, and a
+  /// transition revealing meanwhile would start the next stage's music.
+  void _leave() {
+    if (_left) return;
+    _left = true;
+    _game?.stop();
     _audio
       ..mood(Mood.trust)
       ..uncover()
       ..duck(false);
-    super.dispose();
   }
-
-  void _toMenu() => Navigator.of(context).popUntil((r) => r.isFirst);
 
   Future<void> _openSettings() =>
       Navigator.of(context).push(fadeRoute(const SettingsScreen()));
