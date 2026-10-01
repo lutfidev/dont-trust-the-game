@@ -60,8 +60,9 @@ class SettingsStore extends ChangeNotifier {
     });
   }
 
-  void markEnding(String id) =>
-      _set(() => _prefs.setStringList('endings', {...endingsSeen, id}.toList()));
+  void markEnding(String id) => _set(
+    () => _prefs.setStringList('endings', {...endingsSeen, id}.toList()),
+  );
 
   void resetProgress() => _set(() => _prefs.remove('endings'));
 

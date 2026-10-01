@@ -13,6 +13,7 @@ import '../room/room_scene.dart';
 import '../settings.dart';
 import '../theme.dart';
 import 'glitch.dart';
+import 'route_challenge.dart';
 
 enum LineKind { sys, cmd, lie, ok, voice }
 
@@ -27,7 +28,18 @@ class LogLine {
   String get display => isVoice ? text : '> $text';
 }
 
-enum Step { move, wait, door1, drawer, key, door2, through, watch, truth }
+enum Step {
+  move,
+  wait,
+  door1,
+  drawer,
+  key,
+  door2,
+  through,
+  watch,
+  route,
+  truth,
+}
 
 enum GameOverlay { none, puzzle, log, truth, endTrust, endDont, endTrue }
 
@@ -66,14 +78,17 @@ class StageTransition {
       kind == TransitionKind.tear && !reduced ? 300 : 500;
 }
 
-/// The whole story as a state machine: stages 01 TRUST → 05 TRUTH.
+/// The whole story as a state machine: stages 01 TRUST → 15 THE CORE.
 ///
 /// All timing runs through [tick] on a pause-aware clock, so scheduled beats,
 /// typing and walking freeze while the pause menu is open.
 class GameController extends ChangeNotifier {
-  GameController(this.settings,
-      {int startStage = 1, math.Random? random, this.audio = const SilentAudio()})
-      : glitch = GlitchDirector(random) {
+  GameController(
+    this.settings, {
+    int startStage = 1,
+    math.Random? random,
+    this.audio = const SilentAudio(),
+  }) : glitch = GlitchDirector(random) {
     scene.fx = glitch.fx;
     _reset(startStage);
   }
@@ -100,6 +115,9 @@ class GameController extends ChangeNotifier {
   static const trustLoopMs = 4200;
   static const realCode = [4, 0, 7, 1];
   static const toldCode = [1, 2, 3, 4];
+  static const echoTiles = [Tile(4, 4), Tile(2, 2), Tile(1, 0)];
+  static const _echoNames = ['FAR RIGHT', 'CENTER', 'BACK LEFT'];
+  static const routeExitTile = Tile(0, 1);
 
   /// Light sources for the transitions, in room-canvas coordinates.
   static final doorLight = Iso.p(4.25, 0, 35);
@@ -122,7 +140,14 @@ class GameController extends ChangeNotifier {
   int _leftWalks = 0;
   bool _saidLeft = false, _saidIdle = false, _lied = false;
   int _idleMs = 0, _truthMs = 0, _typeMs = 0, _walkMs = 0, _steps = 0;
+  int _analogMs = 0;
+  double _analogI = 0, _analogJ = 0;
+  Offset _analogVelocity = Offset.zero;
   final Queue<Tile> _walk = Queue();
+  final Set<Tile> _echoesFound = {};
+  final List<Tile> _echoOrder = [];
+  RouteChallenge? _challenge;
+  int _routeProgress = 0, _routeMsRemaining = 0;
   void Function(Tile)? _walkThen;
   final List<(int, VoidCallback)> _tasks = [];
 
@@ -133,8 +158,18 @@ class GameController extends ChangeNotifier {
   LogLine get current => log.last;
   bool get typing => typed < current.text.length;
   bool get busy =>
-      paused || overlay != GameOverlay.none || continuePrompt || transition.value != null;
-  bool get hudVisible => stage < 5;
+      paused ||
+      overlay != GameOverlay.none ||
+      continuePrompt ||
+      transition.value != null;
+  int get echoesFound => _echoesFound.length;
+  int get routeProgress => _routeProgress;
+  int get routeTotal => _challenge?.route.length ?? 0;
+  int get routeSecondsRemaining => (_routeMsRemaining / 1000).ceil();
+  String? get routeName => _challenge?.name;
+  String? get routeInstruction => _challenge?.instruction;
+  List<Tile> get routeTargets => _challenge?.route ?? const [];
+  bool get hudVisible => stage <= 15 && overlay != GameOverlay.truth;
   bool get isEnding =>
       overlay == GameOverlay.endTrust ||
       overlay == GameOverlay.endDont ||
@@ -153,6 +188,7 @@ class GameController extends ChangeNotifier {
   /// more cues either. The audio belongs to the menu from here on.
   void stop() {
     _stopped = true;
+    _clearAnalogInput();
     _clock?.cancel();
   }
 
@@ -170,9 +206,12 @@ class GameController extends ChangeNotifier {
     // A restart can come mid-pause or mid-transition: what those asked of the
     // audio is undone at the end, once the new stage has picked its music.
     final ducked = paused, covered = transition.value != null;
-    _tasks.clear();
-    _walk.clear();
+    _echoesFound.clear();
+    _echoOrder.clear();
+    _challenge = null;
+    _routeProgress = _routeMsRemaining = 0;
     _walkThen = null;
+    _clearAnalogInput();
     stage = 1;
     step = Step.move;
     log
@@ -232,6 +271,19 @@ class GameController extends ChangeNotifier {
           LogLine('WELCOME BACK TO ROOM 01.', LineKind.sys),
           LogLine("DON'T TOUCH THE WALL.", LineKind.cmd),
         ]);
+      case 5:
+        _enterTruthCheckpoint(announce: false);
+        _replaceLog(const [
+          LogLine('THE TRUTH IS NOT AN EXIT.', LineKind.sys),
+          LogLine('THE LAST DOOR IS STILL LOCKED.', LineKind.cmd),
+        ]);
+      case >= 6 && <= 15:
+        _enterRouteStage(s, announce: false);
+        final challenge = _challenge!;
+        _replaceLog([
+          LogLine(challenge.name, LineKind.sys),
+          LogLine(challenge.instruction, LineKind.cmd),
+        ]);
     }
     _syncRoom();
     if (ducked) audio.duck(false);
@@ -258,19 +310,22 @@ class GameController extends ChangeNotifier {
       ..noDoor = !normal
       ..noCabinet = !normal
       ..noLamp = !normal
-      ..wallText = const [];
+      ..wallText = const []
+      ..map = RoomMap.home
+      ..obstacles = const [];
   }
 
   /// Keeps stage-dependent visuals and tap handlers in step with the state.
   void _syncRoom() {
     scene.doorColor = stage >= 3 ? C.warn : C.safe;
     glitch.unease = switch (stage) {
-      3 => Unease.broken,
       4 => Unease.watching,
+      >= 12 && <= 15 => Unease.broken,
+      >= 7 && <= 11 => Unease.hint,
       2 when _lied => Unease.hint,
       _ => Unease.none,
     };
-    final live = stage < 5;
+    final live = stage <= 15;
     scene
       ..onTile = live ? onTile : null
       ..onDoor = live ? onDoor : null
@@ -281,23 +336,28 @@ class GameController extends ChangeNotifier {
 
   /// The music for this moment (see docs/superpowers/specs/2026-09-30-audio-design.md).
   Mood get mood => switch (overlay) {
-        GameOverlay.endTrust => Mood.trust,
-        GameOverlay.endDont => Mood.exit,
-        GameOverlay.endTrue => Mood.truthEnd,
-        _ => switch (stage) {
-            5 => Mood.room,
-            4 => Mood.watching,
-            3 => Mood.broken,
-            // "I LIED." hangs in silence until CONTINUE.
-            2 when _lied => continuePrompt ? Mood.silence : Mood.lie,
-            _ => Mood.trust,
-          },
-      };
+    GameOverlay.endTrust => Mood.trust,
+    GameOverlay.endDont => Mood.exit,
+    GameOverlay.endTrue => Mood.truthEnd,
+    _ => switch (stage) {
+      5 => Mood.room,
+      15 when overlay == GameOverlay.truth => Mood.room,
+      >= 12 => Mood.broken,
+      >= 9 => Mood.watching,
+      >= 6 => Mood.broken,
+      4 => Mood.watching,
+      3 => Mood.broken,
+      // "I LIED." hangs in silence until CONTINUE.
+      2 when _lied => continuePrompt ? Mood.silence : Mood.lie,
+      _ => Mood.trust,
+    },
+  };
 
   /// Ending TRUST cuts straight back to the lullaby, as if nothing happened.
   void _syncMusic() => audio.mood(mood, cut: overlay == GameOverlay.endTrust);
 
   void restart([int s = 1]) {
+    audio.reset();
     _reset(s);
     notifyListeners();
   }
@@ -326,8 +386,12 @@ class GameController extends ChangeNotifier {
       while (_walkMs >= walkStepMs && _walk.isNotEmpty) {
         _walkMs -= walkStepMs;
         scene.player = _walk.removeFirst();
-        audio.play(stage == 4 ? Sfx.stepWatch : Sfx.step,
-            rate: (_steps++).isEven ? .96 : 1.04);
+        audio.play(
+          stage == 4 ? Sfx.stepWatch : Sfx.step,
+          rate: (_steps++).isEven ? .96 : 1.04,
+        );
+        _findEcho(scene.player!);
+        _checkRouteTile(scene.player!);
         changed = true;
         if (_walk.isEmpty) {
           final then = _walkThen;
@@ -335,6 +399,50 @@ class GameController extends ChangeNotifier {
           then?.call(scene.player!);
         }
       }
+    }
+
+    if (_analogVelocity != Offset.zero) {
+      if (busy) {
+        _clearAnalogInput();
+      } else {
+        _analogMs += ms;
+        while (_analogMs >= walkStepMs) {
+          _analogMs -= walkStepMs;
+          _analogI += _analogVelocity.dx;
+          _analogJ += _analogVelocity.dy;
+          final canMoveI = _analogI.abs() >= 1;
+          final canMoveJ = _analogJ.abs() >= 1;
+          if (!canMoveI && !canMoveJ) continue;
+
+          final moveI =
+              canMoveI && (!canMoveJ || _analogI.abs() >= _analogJ.abs());
+          final di = moveI ? (_analogI.isNegative ? -1 : 1) : 0;
+          final dj = moveI ? 0 : (_analogJ.isNegative ? -1 : 1);
+          _analogI -= di;
+          _analogJ -= dj;
+
+          final from = scene.player!;
+          final target = Tile(from.i + di, from.j + dj);
+          if (blocked(target.i, target.j, obstacles: scene.obstacles)) continue;
+
+          scene.player = target;
+          _idleMs = 0;
+          if (stage == 4 && (target.i - target.j) - (from.i - from.j) < 0) {
+            _leftWalk();
+          }
+          _checkRouteTile(target);
+          audio.play(
+            stage == 4 ? Sfx.stepWatch : Sfx.step,
+            rate: (_steps++).isEven ? .96 : 1.04,
+          );
+          _arrive(target);
+          changed = true;
+          if (busy) _clearAnalogInput();
+          break;
+        }
+      }
+    } else {
+      _analogMs = 0;
     }
 
     if (_tasks.isNotEmpty) {
@@ -367,7 +475,9 @@ class GameController extends ChangeNotifier {
       final typedBefore = tr.cardChars;
       tr.elapsed += ms;
       transitionClock.value = tr.elapsed;
-      if (tr.cardChars > typedBefore) _typeTick(LineKind.sys, tr.card[tr.cardChars - 1]);
+      if (tr.cardChars > typedBefore) {
+        _typeTick(LineKind.sys, tr.card[tr.cardChars - 1]);
+      }
     }
 
     if (shake > 0) {
@@ -375,7 +485,10 @@ class GameController extends ChangeNotifier {
       changed = true;
     }
 
-    if (stage == 4 && step == Step.watch && !_saidIdle && overlay == GameOverlay.none &&
+    if (stage == 4 &&
+        step == Step.watch &&
+        !_saidIdle &&
+        overlay == GameOverlay.none &&
         _walk.isEmpty) {
       _idleMs += ms;
       if (_idleMs > idleCommentMs) {
@@ -386,11 +499,26 @@ class GameController extends ChangeNotifier {
     }
 
     if (overlay == GameOverlay.truth) {
-      _truthMs += ms;
-      if (_truthMs > truthIdleMs) {
-        _end(GameOverlay.endTrue);
-        changed = true;
+      if (stage == 15) {
+        _truthMs += ms;
+        if (_truthMs > truthIdleMs) {
+          _end(GameOverlay.endTrue);
+          changed = true;
+        }
       }
+    }
+
+    final challenge = _challenge;
+    if (step == Step.route &&
+        overlay != GameOverlay.truth &&
+        !busy &&
+        challenge != null &&
+        challenge.timeLimitSeconds > 0) {
+      _routeMsRemaining -= ms;
+      if (_routeMsRemaining <= 0) {
+        _restartTimedRoute();
+      }
+      changed = true;
     }
 
     if (changed) notifyListeners();
@@ -428,19 +556,24 @@ class GameController extends ChangeNotifier {
 
   /// Covers the screen, swaps the stage in [onCovered] while nothing is
   /// visible, then reveals it. [afterReveal] runs once the screen is clear.
-  void _transition(StageTransition t,
-      {required VoidCallback onCovered, VoidCallback? afterReveal}) {
+  void _transition(
+    StageTransition t, {
+    required VoidCallback onCovered,
+    VoidCallback? afterReveal,
+  }) {
     glitch.reduced = settings.reduceGlitch || systemReduceMotion;
     final reduced = glitch.reduced;
     transition.value = t;
     transitionClock.value = 0;
     glitch.burst(ms: t.coverMs, heavy: t.kind == TransitionKind.tear);
     audio
-      ..play(reduced
-          ? Sfx.fade
-          : t.kind == TransitionKind.tear
-              ? Sfx.tear
-              : Sfx.light)
+      ..play(
+        reduced
+            ? Sfx.fade
+            : t.kind == TransitionKind.tear
+            ? Sfx.tear
+            : Sfx.light,
+      )
       ..cover(Duration(milliseconds: t.coverMs));
     _later(t.coverMs, () {
       _buzz();
@@ -464,12 +597,17 @@ class GameController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- walking
 
-  static bool blocked(int i, int j) =>
-      i < 0 || j < 0 || i > 5 || j > 5 || (i == 0 && (j == 0 || j == 3 || j == 4));
+  static bool blocked(int i, int j, {List<Tile> obstacles = const []}) =>
+      i < 0 ||
+      j < 0 ||
+      i > 5 ||
+      j > 5 ||
+      (i == 0 && (j == 0 || j == 3 || j == 4)) ||
+      obstacles.contains(Tile(i, j));
 
   /// Breadth-first path on the 6×6 grid, excluding the start tile.
-  static List<Tile>? path(Tile a, Tile b) {
-    if (blocked(b.i, b.j)) return null;
+  static List<Tile>? path(Tile a, Tile b, {List<Tile> obstacles = const []}) {
+    if (blocked(b.i, b.j, obstacles: obstacles)) return null;
     final prev = <Tile, Tile?>{a: null};
     final q = Queue<Tile>()..add(a);
     while (q.isNotEmpty) {
@@ -483,7 +621,9 @@ class GameController extends ChangeNotifier {
       }
       for (final (di, dj) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
         final n = Tile(c.i + di, c.j + dj);
-        if (blocked(n.i, n.j) || prev.containsKey(n)) continue;
+        if (blocked(n.i, n.j, obstacles: obstacles) || prev.containsKey(n)) {
+          continue;
+        }
         prev[n] = c;
         q.add(n);
       }
@@ -493,7 +633,7 @@ class GameController extends ChangeNotifier {
 
   void _walkTo(Tile t, [void Function(Tile)? then]) {
     final from = scene.player!;
-    final p = path(from, t);
+    final p = path(from, t, obstacles: scene.obstacles);
     if (p == null) return;
     _idleMs = 0;
     if (stage == 4 && (t.i - t.j) - (from.i - from.j) < 0) _leftWalk();
@@ -519,13 +659,46 @@ class GameController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- input
 
+  /// Accepts a normalized screen-space stick vector and walks on the iso grid.
+  void setAnalogInput(Offset input) {
+    if (busy || _stopped) {
+      _clearAnalogInput();
+      return;
+    }
+    final distance = input.distance;
+    if (distance < .18) {
+      _clearAnalogInput();
+      return;
+    }
+
+    final scale = distance > 1 ? 1 / distance : 1.0;
+    final x = input.dx * scale;
+    final y = input.dy * scale;
+    final i = x + 2 * y;
+    final j = 2 * y - x;
+    final total = i.abs() + j.abs();
+    final strength = math.min(distance, 1.0);
+    _analogVelocity = Offset(i / total * strength, j / total * strength);
+    _walk.clear();
+    _walkThen = null;
+    _walkMs = 0;
+  }
+
+  void _clearAnalogInput() {
+    _analogVelocity = Offset.zero;
+    _analogI = _analogJ = 0;
+    _analogMs = 0;
+  }
+
   void onTile(Tile t) {
     if (busy) return;
+    _clearAnalogInput();
     _walkTo(t, _arrive);
     notifyListeners();
   }
 
   void _arrive(Tile n) {
+    if (stage == 4) _findEcho(n);
     if (step == Step.move && n.i >= 4 && n.j <= 1) {
       step = Step.wait;
       scene.highlights = const [];
@@ -544,22 +717,105 @@ class GameController extends ChangeNotifier {
         ..keyOnFloor = false
         ..highlights = const [];
       _say('...YOU FOUND IT ANYWAY.', LineKind.sys);
-      _later(1400, () => _transition(
-            StageTransition(TransitionKind.tear, '03 / UI GL1TCH'),
-            onCovered: () {
-              stage = 3;
-              step = Step.door2;
-              scene
-                ..doorHint = true
-                ..wallText = const [];
-              _syncRoom();
-            },
-            afterReveal: () {
-              _say('USE THE KEY.', LineKind.cmd);
-              _later(900, () => _say('OPEN THE DOOR.', LineKind.cmd));
-            },
-          ));
+      _later(
+        1400,
+        () => _transition(
+          StageTransition(TransitionKind.tear, '03 / UI GL1TCH'),
+          onCovered: () {
+            stage = 3;
+            step = Step.door2;
+            scene
+              ..doorHint = true
+              ..wallText = const [];
+            _syncRoom();
+          },
+          afterReveal: () {
+            _say('USE THE KEY.', LineKind.cmd);
+            _later(900, () => _say('OPEN THE DOOR.', LineKind.cmd));
+          },
+        ),
+      );
     }
+  }
+
+  void _findEcho(Tile tile) {
+    if (step != Step.watch ||
+        !echoTiles.contains(tile) ||
+        !_echoesFound.add(tile)) {
+      return;
+    }
+    scene.highlights = [
+      for (final echo in echoTiles)
+        if (!_echoesFound.contains(echo)) TileHighlight(echo, C.warn),
+    ];
+    _echoOrder.add(tile);
+    _idleMs = 0;
+    if (_echoesFound.length == echoTiles.length) {
+      scene.crack = true;
+      audio.play(Sfx.good);
+      _say('THE WALL OPENS.', LineKind.ok);
+    } else {
+      _say(
+        'ECHO ${_echoesFound.length} / ${echoTiles.length}: '
+        '${_echoNames[echoTiles.indexOf(tile)]}.',
+        LineKind.sys,
+      );
+    }
+  }
+
+  void _checkRouteTile(Tile tile) {
+    final challenge = _challenge;
+    if (step != Step.route || challenge == null) return;
+    if (!challenge.route.contains(tile) ||
+        _routeProgress >= challenge.route.length) {
+      return;
+    }
+    if (tile != challenge.route[_routeProgress]) {
+      _routeProgress = 0;
+      if (challenge.timeLimitSeconds > 0) _routeMsRemaining -= 3000;
+      _syncRouteHighlights();
+      audio.play(Sfx.wrong);
+      _say('WRONG MARK. THE ROUTE RESETS.', LineKind.sys);
+      if (_routeMsRemaining <= 0 && challenge.timeLimitSeconds > 0) {
+        _restartTimedRoute();
+      }
+      return;
+    }
+
+    _routeProgress++;
+    _syncRouteHighlights();
+    if (_routeProgress == challenge.route.length) {
+      if (stage == 15) {
+        step = Step.truth;
+        overlay = GameOverlay.truth;
+        scene.highlights = const [];
+        _say('THE CORE IS OPEN.', LineKind.ok);
+        _syncMusic();
+      } else {
+        scene.crack = true;
+        _say('EXIT FOUND. MOVE BEFORE IT CLOSES.', LineKind.ok);
+      }
+    } else {
+      _say('MARK $_routeProgress / ${challenge.route.length}.', LineKind.sys);
+    }
+  }
+
+  void _syncRouteHighlights() {
+    final challenge = _challenge;
+    if (challenge == null) return;
+    scene.highlights = [
+      for (final tile in challenge.route.skip(_routeProgress))
+        TileHighlight(tile, C.ink),
+    ];
+  }
+
+  void _restartTimedRoute() {
+    final challenge = _challenge;
+    if (challenge == null) return;
+    _routeProgress = 0;
+    _routeMsRemaining = challenge.timeLimitSeconds * 1000;
+    _syncRouteHighlights();
+    _say('SIGNAL LOST. ROUTE RESTARTED.', LineKind.sys);
   }
 
   void onDoor() {
@@ -595,11 +851,14 @@ class GameController extends ChangeNotifier {
       case Step.through:
         step = Step.wait;
         _transition(
-          StageTransition(TransitionKind.light, '04 / WATCHING', origin: doorLight),
+          StageTransition(
+            TransitionKind.light,
+            '04 / WATCHING',
+            origin: doorLight,
+          ),
           onCovered: () => _enterStage4(announce: false),
           afterReveal: () {
-            _say('WELCOME BACK TO ROOM 01.', LineKind.sys);
-            _later(1500, () => _say("DON'T TOUCH THE WALL.", LineKind.cmd));
+            _announceStage4();
           },
         );
       case _ when stage == 4:
@@ -619,12 +878,66 @@ class GameController extends ChangeNotifier {
     _setRoom(normal: true);
     scene
       ..player = const Tile(1, 4)
-      ..crack = true;
+      ..crack = false
+      ..highlights = [
+        for (final echo in echoTiles) TileHighlight(echo, C.warn),
+      ];
+    _echoesFound.clear();
+    _echoOrder.clear();
     _idleMs = 0;
     _syncRoom();
+    if (announce) _announceStage4();
+  }
+
+  void _announceStage4() {
+    _say('WELCOME BACK TO ROOM 01.', LineKind.sys);
+    _later(1500, () {
+      _say("DON'T TOUCH THE WALL.", LineKind.cmd);
+      _later(1500, () => _say('FIND THREE ECHOES.', LineKind.cmd));
+    });
+  }
+
+  void _enterTruthCheckpoint({required bool announce}) {
+    stage = 5;
+    step = Step.truth;
+    _challenge = null;
+    _routeProgress = _routeMsRemaining = 0;
+    _truthMs = 0;
+    _setRoom(normal: false);
+    scene
+      ..map = RoomMap.truth
+      ..secret = true
+      ..noWalls = true
+      ..wallText = truthWallText
+      ..player = const Tile(2, 2)
+      ..crack = true
+      ..highlights = const [TileHighlight(routeExitTile, C.safe)];
+    _syncRoom();
     if (announce) {
-      _say('WELCOME BACK TO ROOM 01.', LineKind.sys);
-      _later(1500, () => _say("DON'T TOUCH THE WALL.", LineKind.cmd));
+      _say('THE TRUTH WAS ONLY THE FIRST DOOR.', LineKind.sys);
+      _later(1500, () => _say('THE LAST DOOR IS STILL LOCKED.', LineKind.cmd));
+    }
+  }
+
+  void _enterRouteStage(int nextStage, {bool announce = true}) {
+    final challenge = RouteChallenge.at(nextStage);
+    stage = nextStage;
+    step = Step.route;
+    _challenge = challenge;
+    _routeProgress = 0;
+    _routeMsRemaining = challenge.timeLimitSeconds * 1000;
+    _setRoom(normal: true);
+    scene
+      ..map = challenge.map
+      ..obstacles = challenge.obstacles
+      ..player = const Tile(1, 4)
+      ..highlights = [
+        for (final tile in challenge.route) TileHighlight(tile, C.warn),
+      ];
+    _syncRoom();
+    if (announce) {
+      _say(challenge.name, LineKind.sys);
+      _later(1200, () => _say(challenge.instruction, LineKind.cmd));
     }
   }
 
@@ -648,27 +961,46 @@ class GameController extends ChangeNotifier {
   }
 
   void onCrack() {
-    if (busy || stage != 4) return;
-    _walkTo(const Tile(0, 1), (_) {
+    if (busy || !scene.crack) return;
+    final nextStage = switch (stage) {
+      4 => 5,
+      5 => 6,
+      >= 6 && < 15 => stage + 1,
+      _ => null,
+    };
+    if (nextStage == null) return;
+    _walkTo(routeExitTile, (_) {
       audio.play(Sfx.crack);
+      final enteringTruth = nextStage == 5;
+      final changesMap =
+          enteringTruth ||
+          nextStage == 6 ||
+          nextStage == 9 ||
+          nextStage == 12 ||
+          nextStage == 15;
+      final card = enteringTruth
+          ? '05 / TRUTH'
+          : RouteChallenge.at(nextStage).name;
       _transition(
-        StageTransition(TransitionKind.light, '05 / TRUTH', origin: crackLight),
+        StageTransition(
+          changesMap ? TransitionKind.tear : TransitionKind.light,
+          card,
+          origin: crackLight,
+        ),
         onCovered: () {
-          stage = 5;
-          step = Step.truth;
-          _setRoom(normal: false);
-          scene
-            ..secret = true
-            ..wallText = truthWallText
-            ..facing = Facing.nw // facing the opening
-            ..player = const Tile(1, 2);
-          _syncRoom();
-          _say('...', LineKind.sys);
+          if (enteringTruth) {
+            _enterTruthCheckpoint(announce: true);
+          } else {
+            _enterRouteStage(nextStage, announce: false);
+          }
         },
-        afterReveal: () => _later(1300, () {
-          _truthMs = 0;
-          overlay = GameOverlay.truth;
-        }),
+        afterReveal: enteringTruth
+            ? null
+            : () {
+                final challenge = RouteChallenge.at(nextStage);
+                _say(challenge.name, LineKind.sys);
+                _later(1200, () => _say(challenge.instruction, LineKind.cmd));
+              },
       );
     });
     notifyListeners();
@@ -704,8 +1036,9 @@ class GameController extends ChangeNotifier {
         });
       });
     } else {
-      puzzleStatus =
-          listEquals(dials, toldCode) ? PuzzleStatus.lied : PuzzleStatus.wrong;
+      puzzleStatus = listEquals(dials, toldCode)
+          ? PuzzleStatus.lied
+          : PuzzleStatus.wrong;
       audio.play(puzzleStatus == PuzzleStatus.lied ? Sfx.wrongLied : Sfx.wrong);
       if (puzzleStatus == PuzzleStatus.lied) _buzz();
     }
@@ -713,7 +1046,9 @@ class GameController extends ChangeNotifier {
   }
 
   void closeOverlay() {
-    if (overlay == GameOverlay.puzzle && puzzleStatus == PuzzleStatus.open) return;
+    if (overlay == GameOverlay.puzzle && puzzleStatus == PuzzleStatus.open) {
+      return;
+    }
     if (overlay == GameOverlay.puzzle || overlay == GameOverlay.log) {
       overlay = GameOverlay.none;
       notifyListeners();
@@ -741,12 +1076,14 @@ class GameController extends ChangeNotifier {
   // ---------------------------------------------------------------- pause / endings
 
   bool get canPause =>
-      stage < 5 &&
+      stage <= 15 &&
+      overlay != GameOverlay.truth &&
       transition.value == null &&
       (overlay == GameOverlay.none || overlay == GameOverlay.log);
 
   void pause() {
     if (!canPause || paused) return;
+    _clearAnalogInput();
     paused = true;
     pauses++;
     audio
@@ -768,13 +1105,15 @@ class GameController extends ChangeNotifier {
   }
 
   void choose(GameOverlay ending) {
-    if (overlay != GameOverlay.truth) return;
+    if (stage != 15 || overlay != GameOverlay.truth) return;
     _end(ending);
+    glitch.unease = Unease.none;
     notifyListeners();
   }
 
   void _end(GameOverlay ending) {
     overlay = ending;
+    glitch.unease = Unease.none;
     settings.markEnding(ending.name);
     if (ending == GameOverlay.endTrust) {
       audio.play(Sfx.good); // "YOU DID EVERYTHING I ASKED."
@@ -790,7 +1129,8 @@ class GameController extends ChangeNotifier {
       scene
         ..noCabinet = true
         ..doorOpen = true
-        ..facing = Facing.ne // back turned, looking at the way out
+        ..facing = Facing
+            .ne // back turned, looking at the way out
         ..player = const Tile(4, 1);
     } else {
       _setRoom(normal: false);

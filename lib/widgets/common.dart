@@ -14,7 +14,11 @@ import '../theme.dart';
 /// device. Height is whatever the device aspect gives (min 700), so
 /// top- and bottom-anchored elements keep their design offsets.
 class DesignFrame extends StatelessWidget {
-  const DesignFrame({super.key, required this.child, this.background = C.void_});
+  const DesignFrame({
+    super.key,
+    required this.child,
+    this.background = C.void_,
+  });
   final Widget child;
   final Color background;
 
@@ -26,19 +30,25 @@ class DesignFrame extends StatelessWidget {
     return ColoredBox(
       color: background,
       child: SafeArea(
-        child: LayoutBuilder(builder: (context, box) {
-          final scale = math.min(box.maxWidth / width, box.maxHeight / minHeight);
-          return FittedBox(
-            child: SizedBox(
-              width: width,
-              height: box.maxHeight / scale,
-              child: MediaQuery(
-                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-                child: child,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final scale = math.min(
+              box.maxWidth / width,
+              box.maxHeight / minHeight,
+            );
+            return FittedBox(
+              child: SizedBox(
+                width: width,
+                height: box.maxHeight / scale,
+                child: MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: TextScaler.noScaling),
+                  child: child,
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
@@ -91,10 +101,12 @@ class _BlockButtonState extends State<BlockButton> {
       BtnKind.outline => C.ink,
     };
     final size = widget.fontSize ?? (primary ? 13 : 12);
-    final style = mono(size,
-        color: fg,
-        tracking: widget.tracking ?? .2,
-        weight: primary ? FontWeight.w600 : FontWeight.w400);
+    final style = mono(
+      size,
+      color: fg,
+      tracking: widget.tracking ?? .2,
+      weight: primary ? FontWeight.w600 : FontWeight.w400,
+    );
     final label = glyphText(widget.label, style);
     final content = Padding(
       padding: EdgeInsets.symmetric(horizontal: widget.padding),
@@ -103,8 +115,8 @@ class _BlockButtonState extends State<BlockButton> {
         mainAxisAlignment: widget.center
             ? MainAxisAlignment.center
             : widget.arrow
-                ? MainAxisAlignment.spaceBetween
-                : MainAxisAlignment.start,
+            ? MainAxisAlignment.spaceBetween
+            : MainAxisAlignment.start,
         children: [label, if (widget.arrow) glyphText('▸', style)],
       ),
     );
@@ -167,7 +179,10 @@ class DashedRectPainter extends CustomPainter {
       final len = (b - a).distance, dir = (b - a) / len;
       for (var d = 0.0; d < len; d += dash + gap) {
         canvas.drawLine(
-            a + dir * d + dir * .5, a + dir * math.min(d + dash, len) + dir * .5, p);
+          a + dir * d + dir * .5,
+          a + dir * math.min(d + dash, len) + dir * .5,
+          p,
+        );
       }
     }
   }
@@ -183,10 +198,10 @@ class BlinkCursor extends StatefulWidget {
   final Color color;
 
   static InlineSpan span(double fontSize, Color color) => WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: BlinkCursor(fontSize: fontSize, color: color),
-      );
+    alignment: PlaceholderAlignment.baseline,
+    baseline: TextBaseline.alphabetic,
+    child: BlinkCursor(fontSize: fontSize, color: color),
+  );
 
   @override
   State<BlinkCursor> createState() => _BlinkCursorState();
@@ -194,8 +209,10 @@ class BlinkCursor extends StatefulWidget {
 
 class _BlinkCursorState extends State<BlinkCursor>
     with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(seconds: 1))
-    ..repeat();
+  late final _c = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 1),
+  )..repeat();
 
   @override
   void dispose() {
@@ -231,8 +248,9 @@ class Scanlines extends StatelessWidget {
   const Scanlines({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const IgnorePointer(child: CustomPaint(painter: _ScanPainter(), size: Size.infinite));
+  Widget build(BuildContext context) => const IgnorePointer(
+    child: CustomPaint(painter: _ScanPainter(), size: Size.infinite),
+  );
 }
 
 class _ScanPainter extends CustomPainter {
@@ -264,9 +282,9 @@ class _RoomViewState extends State<RoomView> {
 
   @override
   Widget build(BuildContext context) => SizedBox.fromSize(
-        size: Iso.canvas,
-        child: GameWidget(game: _game),
-      );
+    size: Iso.canvas,
+    child: GameWidget(game: _game),
+  );
 }
 
 /// "01 / TRUST" with its status dot.
@@ -279,7 +297,10 @@ class StageLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = Container(
-        width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle));
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+    );
     final t = Text(text, style: mono(10, color: C.dim, tracking: .22));
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -292,8 +313,13 @@ class StageLabel extends StatelessWidget {
 
 /// The small outlined HUD button ("[ II ]", "[ ← ]").
 class HudButton extends StatelessWidget {
-  const HudButton(this.label,
-      {super.key, this.onTap, this.border = C.borderHi, this.shadows});
+  const HudButton(
+    this.label, {
+    super.key,
+    this.onTap,
+    this.border = C.borderHi,
+    this.shadows,
+  });
   final String label;
   final VoidCallback? onTap;
   final Color border;
@@ -301,53 +327,65 @@ class HudButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-        button: true,
-        label: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap == null
-              ? null
-              : () {
-                  AudioScope.of(context).play(Sfx.click);
-                  onTap!();
-                },
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(border: Border.all(color: border)),
-            child: glyphText(label, mono(11, tracking: .16, shadows: shadows)),
-          ),
-        ),
-      );
+    button: true,
+    label: label,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap == null
+          ? null
+          : () {
+              AudioScope.of(context).play(Sfx.click);
+              onTap!();
+            },
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(border: Border.all(color: border)),
+        child: glyphText(label, mono(11, tracking: .16, shadows: shadows)),
+      ),
+    ),
+  );
 }
 
 Route<T> fadeRoute<T>(Widget page) => PageRouteBuilder<T>(
-      pageBuilder: (_, _, _) => page,
-      transitionDuration: const Duration(milliseconds: 350),
-      reverseTransitionDuration: const Duration(milliseconds: 250),
-      transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
-    );
+  pageBuilder: (_, _, _) => page,
+  transitionDuration: const Duration(milliseconds: 350),
+  reverseTransitionDuration: const Duration(milliseconds: 250),
+  transitionsBuilder: (_, a, _, child) =>
+      FadeTransition(opacity: a, child: child),
+);
 
 /// Plex Mono has no ▸ ▲ ▼, so those are drawn as small triangles inline.
 Widget glyphText(String s, TextStyle style) {
   final spans = <InlineSpan>[];
   final buf = StringBuffer();
   for (final ch in s.characters) {
-    final dir = const {'▸': AxisDirection.right, '▲': AxisDirection.up, '▼': AxisDirection.down}[ch];
+    final dir = const {
+      '▸': AxisDirection.right,
+      '▲': AxisDirection.up,
+      '▼': AxisDirection.down,
+    }[ch];
     if (dir == null) {
       buf.write(ch);
       continue;
     }
     if (buf.isNotEmpty) spans.add(TextSpan(text: buf.toString()));
     buf.clear();
-    spans.add(WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
-      child: Tri(dir, size: style.fontSize! * .62, color: style.color!),
-    ));
+    spans.add(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Tri(dir, size: style.fontSize! * .62, color: style.color!),
+      ),
+    );
   }
   if (buf.isNotEmpty) spans.add(TextSpan(text: buf.toString()));
-  return Text.rich(TextSpan(children: spans), style: style, maxLines: 1, softWrap: false);
+  return Text.rich(
+    TextSpan(children: spans),
+    style: style,
+    maxLines: 1,
+    softWrap: false,
+  );
 }
 
 class Tri extends StatelessWidget {
@@ -357,10 +395,8 @@ class Tri extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => CustomPaint(
-        size: Size.square(size),
-        painter: _TriPainter(dir, color),
-      );
+  Widget build(BuildContext context) =>
+      CustomPaint(size: Size.square(size), painter: _TriPainter(dir, color));
 }
 
 class _TriPainter extends CustomPainter {
@@ -372,10 +408,26 @@ class _TriPainter extends CustomPainter {
   void paint(Canvas canvas, Size s) {
     final w = s.width, h = s.height, m = w * .12;
     final pts = switch (dir) {
-      AxisDirection.right => [Offset(m, m), Offset(w - m, h / 2), Offset(m, h - m)],
-      AxisDirection.left => [Offset(w - m, m), Offset(m, h / 2), Offset(w - m, h - m)],
-      AxisDirection.up => [Offset(m, h - m * 2), Offset(w / 2, m * 2), Offset(w - m, h - m * 2)],
-      AxisDirection.down => [Offset(m, m * 2), Offset(w / 2, h - m * 2), Offset(w - m, m * 2)],
+      AxisDirection.right => [
+        Offset(m, m),
+        Offset(w - m, h / 2),
+        Offset(m, h - m),
+      ],
+      AxisDirection.left => [
+        Offset(w - m, m),
+        Offset(m, h / 2),
+        Offset(w - m, h - m),
+      ],
+      AxisDirection.up => [
+        Offset(m, h - m * 2),
+        Offset(w / 2, m * 2),
+        Offset(w - m, h - m * 2),
+      ],
+      AxisDirection.down => [
+        Offset(m, m * 2),
+        Offset(w / 2, h - m * 2),
+        Offset(w - m, m * 2),
+      ],
     };
     canvas.drawPath(Path()..addPolygon(pts, true), Paint()..color = color);
   }

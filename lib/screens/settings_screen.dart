@@ -41,42 +41,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _Row('SFX', _Cells('sfx', s.sfx, s.setSfx)),
               _Row(
                 'TEXT SPEED',
-                Row(children: [
-                  for (final sp in TextSpeed.values)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: GestureDetector(
-                        onTap: () {
-                          s.setSpeed(sp);
-                          AudioScope.of(context).play(Sfx.click);
-                        },
-                        child: Container(
-                          height: 36,
-                          padding: const EdgeInsets.symmetric(horizontal: 9),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                              border: Border.all(color: sp == s.speed ? C.ink : C.line)),
-                          child: Text(sp.label,
-                              style: mono(10,
-                                  tracking: .12,
-                                  color: sp == s.speed ? C.ink : C.muted)),
+                Row(
+                  children: [
+                    for (final sp in TextSpeed.values)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: GestureDetector(
+                          onTap: () {
+                            s.setSpeed(sp);
+                            AudioScope.of(context).play(Sfx.click);
+                          },
+                          child: Container(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 9),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: sp == s.speed ? C.ink : C.line,
+                              ),
+                            ),
+                            child: Text(
+                              sp.label,
+                              style: mono(
+                                10,
+                                tracking: .12,
+                                color: sp == s.speed ? C.ink : C.muted,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                ]),
+                  ],
+                ),
               ),
               _Row('VIBRATION', _Toggle(s.vibration, s.toggleVibration)),
               _Row('SCREEN SHAKE', _Toggle(s.screenShake, s.toggleShake)),
               _Row(
                 'REDUCE GLITCH',
                 _Toggle(s.reduceGlitch, s.toggleReduceGlitch),
-                sub: Text('LESS FLICKER · SOFT TRANSITIONS',
-                    style: mono(10, color: C.muted, tracking: .14)),
+                sub: Text(
+                  'LESS FLICKER · SOFT TRANSITIONS',
+                  style: mono(10, color: C.muted, tracking: .14),
+                ),
               ),
               _Row(
                 'LET THE GAME HELP YOU',
                 _Toggle(s.assist, s.toggleAssist),
-                sub: Text(s.assistMessage, style: mono(10, color: C.warn, tracking: .14)),
+                sub: Text(
+                  s.assistMessage,
+                  style: mono(10, color: C.warn, tracking: .14),
+                ),
               ),
               const Spacer(),
               Row(
@@ -92,7 +106,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       child: Text(
-                        const ['RESET PROGRESS', 'TAP AGAIN TO RESET', 'PROGRESS RESET.'][_resetTaps],
+                        const [
+                          'RESET PROGRESS',
+                          'TAP AGAIN TO RESET',
+                          'PROGRESS RESET.',
+                        ][_resetTaps],
                         style: mono(10, color: C.warn, tracking: .2),
                       ),
                     ),
@@ -119,7 +137,9 @@ class _Row extends StatelessWidget {
     final l = Text(label, style: mono(12, tracking: .16));
     return Container(
       constraints: const BoxConstraints(minHeight: 60),
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.divider))),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: C.divider)),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -129,7 +149,11 @@ class _Row extends StatelessWidget {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
-                    children: [l, const SizedBox(height: 4), SizedBox(height: 13, child: sub)],
+                    children: [
+                      l,
+                      const SizedBox(height: 4),
+                      SizedBox(height: 13, child: sub),
+                    ],
                   ),
           ),
           const SizedBox(width: 12),
@@ -147,32 +171,35 @@ class _Cells extends StatelessWidget {
   final ValueChanged<int> onSet;
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-        for (var k = 0; k < 10; k++)
-          Padding(
-            padding: EdgeInsets.only(left: k == 0 ? 0 : 3),
-            child: GestureDetector(
-              key: ValueKey('$name-$k'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                // The first cell again at 1 mutes; the click comes after, so
-                // on the SFX row it previews the new level.
-                onSet(k == 0 && value == 1 ? 0 : k + 1);
-                AudioScope.of(context).play(Sfx.click);
-              },
-              child: SizedBox(
-                width: 13,
-                height: 44,
-                child: Center(
-                  child: SizedBox(
-                      width: 13,
-                      height: 16,
-                      child: ColoredBox(color: k < value ? C.ink : C.line)),
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (var k = 0; k < 10; k++)
+        Padding(
+          padding: EdgeInsets.only(left: k == 0 ? 0 : 3),
+          child: GestureDetector(
+            key: ValueKey('$name-$k'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              // The first cell again at 1 mutes; the click comes after, so
+              // on the SFX row it previews the new level.
+              onSet(k == 0 && value == 1 ? 0 : k + 1);
+              AudioScope.of(context).play(Sfx.click);
+            },
+            child: SizedBox(
+              width: 13,
+              height: 44,
+              child: Center(
+                child: SizedBox(
+                  width: 13,
+                  height: 16,
+                  child: ColoredBox(color: k < value ? C.ink : C.line),
                 ),
               ),
             ),
           ),
-      ]);
+        ),
+    ],
+  );
 }
 
 class _Toggle extends StatelessWidget {
@@ -182,17 +209,19 @@ class _Toggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          AudioScope.of(context).play(Sfx.click);
-          onTap();
-        },
-        child: SizedBox(
-          height: 44,
-          child: Center(
-            child: Text(on ? '[ ON ]' : '[ OFF ]',
-                style: mono(12, tracking: .16, color: on ? C.ink : C.muted)),
-          ),
+    behavior: HitTestBehavior.opaque,
+    onTap: () {
+      AudioScope.of(context).play(Sfx.click);
+      onTap();
+    },
+    child: SizedBox(
+      height: 44,
+      child: Center(
+        child: Text(
+          on ? '[ ON ]' : '[ OFF ]',
+          style: mono(12, tracking: .16, color: on ? C.ink : C.muted),
         ),
-      );
+      ),
+    ),
+  );
 }

@@ -13,13 +13,17 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
-    statusBarColor: Colors.transparent,
-    systemNavigationBarColor: C.void_,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: C.void_,
+    ),
+  );
   final settings = await SettingsStore.load();
   final audio = AudioDirector(SoloudBackend(), settings);
-  unawaited(audio.start()); // loads in the background; the game never waits on sound
+  unawaited(
+    audio.start(),
+  ); // loads in the background; the game never waits on sound
   // Let the audio device rest while the app is in the background.
   AppLifecycleListener(onHide: audio.suspend, onShow: audio.resume);
   runApp(DontTrustTheGame(settings: settings, audio: audio));
@@ -27,16 +31,22 @@ Future<void> main() async {
 
 /// Makes the [SettingsStore] available to every screen.
 class AppScope extends InheritedNotifier<SettingsStore> {
-  const AppScope({super.key, required SettingsStore settings, required super.child})
-      : super(notifier: settings);
+  const AppScope({
+    super.key,
+    required SettingsStore settings,
+    required super.child,
+  }) : super(notifier: settings);
 
   static SettingsStore of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
 }
 
 class DontTrustTheGame extends StatelessWidget {
-  const DontTrustTheGame(
-      {super.key, required this.settings, this.audio = const SilentAudio()});
+  const DontTrustTheGame({
+    super.key,
+    required this.settings,
+    this.audio = const SilentAudio(),
+  });
   final SettingsStore settings;
   final GameAudio audio;
 

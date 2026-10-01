@@ -62,7 +62,9 @@ class _BootScreenState extends State<BootScreen> {
     if (at(_helloAt)) _audio.play(Sfx.hello);
     for (final (s, start) in [(_hello, _helloAt), (_help, _helpAt)]) {
       final now = _typedLen(s, start, to);
-      if (now > _typedLen(s, start, from) && s[now - 1] != ' ') _audio.play(Sfx.type);
+      if (now > _typedLen(s, start, from) && s[now - 1] != ' ') {
+        _audio.play(Sfx.type);
+      }
     }
   }
 
@@ -76,7 +78,8 @@ class _BootScreenState extends State<BootScreen> {
     Navigator.of(context).pushReplacement(fadeRoute(const GameScreen()));
   }
 
-  String _typed(String s, int startMs) => s.substring(0, _typedLen(s, startMs, _ms));
+  String _typed(String s, int startMs) =>
+      s.substring(0, _typedLen(s, startMs, _ms));
 
   @override
   Widget build(BuildContext context) {
@@ -91,81 +94,118 @@ class _BootScreenState extends State<BootScreen> {
         onTap: _go,
         child: DesignFrame(
           background: Colors.black,
-          child: Stack(children: [
-            Positioned(
-              top: 28,
-              left: 28,
-              child: Text('DTTG // BOOT 0.9.3', style: mono(10, color: C.muted, tracking: .2)),
-            ),
-            Positioned(
-              top: 150,
-              left: 28,
-              right: 28,
-              child: Column(children: [
-                for (var k = 0; k < _checks.length; k++)
-                  if (_ms >= k * 380)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Stack(
+            children: [
+              Positioned(
+                top: 28,
+                left: 28,
+                child: Text(
+                  'DTTG // BOOT 0.9.3',
+                  style: mono(10, color: C.muted, tracking: .2),
+                ),
+              ),
+              Positioned(
+                top: 150,
+                left: 28,
+                right: 28,
+                child: Column(
+                  children: [
+                    for (var k = 0; k < _checks.length; k++)
+                      if (_ms >= k * 380)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _checks[k],
+                                style: mono(12, color: C.dim, tracking: .06),
+                              ),
+                              if (_ms >= k * 380 + 260)
+                                Text(
+                                  'OK',
+                                  style: mono(12, color: C.safe, tracking: .06),
+                                ),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 340,
+                left: 28,
+                right: 28,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_ms >= _helloAt)
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: hello),
+                            if (!cursorOnHelp) BlinkCursor.span(28, C.ink),
+                          ],
+                        ),
+                        style: _big,
+                      ),
+                    const SizedBox(height: 8),
+                    if (cursorOnHelp)
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: help),
+                            BlinkCursor.span(28, C.ink),
+                          ],
+                        ),
+                        style: _big,
+                      ),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 28,
+                right: 28,
+                bottom: 46,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 1,
+                      child: Stack(
                         children: [
-                          Text(_checks[k], style: mono(12, color: C.dim, tracking: .06)),
-                          if (_ms >= k * 380 + 260)
-                            Text('OK', style: mono(12, color: C.safe, tracking: .06)),
+                          const Positioned.fill(
+                            child: ColoredBox(color: C.terminalTop),
+                          ),
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: progress,
+                            child: const ColoredBox(
+                              color: C.ink,
+                              child: SizedBox.expand(),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-              ]),
-            ),
-            Positioned(
-              top: 340,
-              left: 28,
-              right: 28,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_ms >= _helloAt)
-                    Text.rich(TextSpan(children: [
-                      TextSpan(text: hello),
-                      if (!cursorOnHelp) BlinkCursor.span(28, C.ink),
-                    ]), style: _big),
-                  const SizedBox(height: 8),
-                  if (cursorOnHelp)
-                    Text.rich(TextSpan(children: [
-                      TextSpan(text: help),
-                      BlinkCursor.span(28, C.ink),
-                    ]), style: _big),
-                ],
-              ),
-            ),
-            Positioned(
-              left: 28,
-              right: 28,
-              bottom: 46,
-              child: Column(children: [
-                SizedBox(
-                  height: 1,
-                  child: Stack(children: [
-                    const Positioned.fill(child: ColoredBox(color: C.terminalTop)),
-                    FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: progress,
-                      child: const ColoredBox(color: C.ink, child: SizedBox.expand()),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'LOADING ${(progress * 100).round()}%',
+                          style: mono(10, color: C.muted, tracking: .2),
+                        ),
+                        Text(
+                          'TAP TO SKIP',
+                          style: mono(10, color: C.muted, tracking: .2),
+                        ),
+                      ],
                     ),
-                  ]),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('LOADING ${(progress * 100).round()}%',
-                        style: mono(10, color: C.muted, tracking: .2)),
-                    Text('TAP TO SKIP', style: mono(10, color: C.muted, tracking: .2)),
                   ],
                 ),
-              ]),
-            ),
-          ]),
+              ),
+            ],
+          ),
         ),
       ),
     );

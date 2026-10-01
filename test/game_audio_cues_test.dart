@@ -26,14 +26,56 @@ void main() {
     }
   }
 
+  void findEchoes(GameController g) {
+    for (final tile in GameController.echoTiles) {
+      g.onTile(tile);
+      run(g, 2500);
+    }
+  }
+
+  void solveRoute(GameController g) {
+    for (final tile in g.routeTargets) {
+      final steps = GameController.path(
+        g.scene.player!,
+        tile,
+        obstacles: g.scene.obstacles,
+      )!.length;
+      g.onTile(tile);
+      run(g, steps * GameController.walkStepMs + 80);
+    }
+  }
+
+  void reachFinalStage(GameController g) {
+    if (g.stage == 5) {
+      g.onCrack();
+      run(g, 2000);
+    }
+    while (g.stage < 15) {
+      solveRoute(g);
+      g.onCrack();
+      run(g, 2000);
+    }
+    solveRoute(g);
+    run(g, 1000);
+  }
+
   test('each stage has its music', () {
     for (final (stage, mood) in [
       (1, Mood.trust),
       (2, Mood.trust),
       (3, Mood.broken),
       (4, Mood.watching),
+      (5, Mood.room),
+      (6, Mood.broken),
+      (9, Mood.watching),
+      (12, Mood.broken),
+      (15, Mood.broken),
     ]) {
-      expect(GameController(settings, startStage: stage).mood, mood, reason: 'stage $stage');
+      expect(
+        GameController(settings, startStage: stage).mood,
+        mood,
+        reason: 'stage $stage',
+      );
     }
   });
 
@@ -92,19 +134,27 @@ void main() {
     run(g, GameController.idleCommentMs + 500);
     expect(a.played, contains(Sfx.voice)); // "Why are you not moving?"
 
-    // 04 → 05 through the crack; waiting ends it.
+    // 04 → 05 reaches Truth, but the game does not end there.
+    findEchoes(g);
     g.onCrack();
     run(g, 5000);
     expect(a.played, contains(Sfx.crack));
+    expect(g.stage, 5);
     expect(a.moods.last, Mood.room);
+    run(g, GameController.truthIdleMs + 500);
+    expect(g.overlay, GameOverlay.none);
+
+    // Stages 06–15 lead to the only ending choice.
+    reachFinalStage(g);
+    expect(g.stage, 15);
+    expect(g.overlay, GameOverlay.truth);
     run(g, GameController.truthIdleMs + 500);
     expect(a.moods.last, Mood.truthEnd);
   });
 
   test('trusting the game cuts straight back to the lullaby and keeps it', () {
-    final g = GameController(settings, startStage: 4, audio: a);
-    g.onCrack();
-    run(g, 5000);
+    final g = GameController(settings, startStage: 5, audio: a);
+    reachFinalStage(g);
     a.clear();
     g.choose(GameOverlay.endTrust);
     expect(a.calls, containsAllInOrder(['play good', 'mood trust cut']));
@@ -114,28 +164,35 @@ void main() {
   });
 
   test('not trusting the game opens the door to the open air', () {
-    final g = GameController(settings, startStage: 4, audio: a);
-    g.onCrack();
-    run(g, 5000);
+    final g = GameController(settings, startStage: 5, audio: a);
+    reachFinalStage(g);
     g.choose(GameOverlay.endDont);
     expect(a.played.last, Sfx.doorOpen);
     expect(a.moods.last, Mood.exit);
   });
 
-  test('typing ticks skip spaces and the ok/lie/voice lines; steps tick per tile', () {
-    final g = GameController(settings, audio: a);
-    run(g, 1000);
-    expect(a.count(Sfx.type), 'MOVERIGHT.'.length);
-    a.clear();
-    g.onTile(const Tile(4, 0));
-    run(g, 3000);
-    expect(a.count(Sfx.step), 7);
-    expect(a.count(Sfx.good), 1);
-    expect(a.count(Sfx.type), 'OPENTHEDOOR.'.length);
-  });
+  test(
+    'typing ticks skip spaces and the ok/lie/voice lines; steps tick per tile',
+    () {
+      final g = GameController(settings, audio: a);
+      run(g, 1000);
+      expect(a.count(Sfx.type), 'MOVERIGHT.'.length);
+      a.clear();
+      g.onTile(const Tile(4, 0));
+      run(g, 3000);
+      expect(a.count(Sfx.step), 7);
+      expect(a.count(Sfx.good), 1);
+      expect(a.count(Sfx.type), 'OPENTHEDOOR.'.length);
+    },
+  );
 
   test('the stage card ticks as it types', () {
-    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
+    final g = GameController(
+      settings,
+      startStage: 3,
+      random: math.Random(2),
+      audio: a,
+    );
     g.onDoor();
     run(g, 1500);
     g.onDoor(); // through: the light transition starts right away
@@ -145,7 +202,12 @@ void main() {
   });
 
   test('glitch bursts sound and stumble; REDUCE GLITCH silences them', () {
-    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
+    final g = GameController(
+      settings,
+      startStage: 3,
+      random: math.Random(2),
+      audio: a,
+    );
     run(g, 20000);
     final heavy = a.count(Sfx.glitchHeavy);
     expect(heavy, greaterThanOrEqualTo(3));
@@ -165,33 +227,49 @@ void main() {
     expect(a.played, isNot(contains(Sfx.light)));
   });
 
-  test('a stopped game sends no more cues, even with a stage about to be revealed', () {
-    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
-    g.onDoor();
-    run(g, 1500);
-    g.onDoor(); // through: the light transition starts
-    run(g, 600); // covered, stage 04 waiting underneath
-    a.clear();
-    g.stop(); // leaving for the menu
-    run(g, 3000);
-    expect(a.calls, isEmpty);
-  });
+  test(
+    'a stopped game sends no more cues, even with a stage about to be revealed',
+    () {
+      final g = GameController(
+        settings,
+        startStage: 3,
+        random: math.Random(2),
+        audio: a,
+      );
+      g.onDoor();
+      run(g, 1500);
+      g.onDoor(); // through: the light transition starts
+      run(g, 600); // covered, stage 04 waiting underneath
+      a.clear();
+      g.stop(); // leaving for the menu
+      run(g, 3000);
+      expect(a.calls, isEmpty);
+    },
+  );
 
-  test('restarting hands back what a pause or a transition took from the music', () {
-    final g = GameController(settings, startStage: 3, random: math.Random(2), audio: a);
-    g.onDoor();
-    run(g, 1500);
-    g.onDoor();
-    run(g, 600); // covered
-    a.clear();
-    g.restart();
-    expect(a.calls, ['mood trust', 'uncover']);
+  test(
+    'restarting hands back what a pause or a transition took from the music',
+    () {
+      final g = GameController(
+        settings,
+        startStage: 3,
+        random: math.Random(2),
+        audio: a,
+      );
+      g.onDoor();
+      run(g, 1500);
+      g.onDoor();
+      run(g, 600); // covered
+      a.clear();
+      g.restart();
+      expect(a.calls, ['reset', 'mood trust', 'uncover']);
 
-    g.pause();
-    a.clear();
-    g.restart();
-    expect(a.calls, ['mood trust', 'duck false']);
-  });
+      g.pause();
+      a.clear();
+      g.restart();
+      expect(a.calls, ['reset', 'mood trust', 'duck false']);
+    },
+  );
 
   test('pause ducks the music and resume brings it back', () {
     final g = GameController(settings, audio: a);

@@ -27,6 +27,9 @@ abstract interface class GameAudio {
 
   /// The pause menu: the music ducks under it.
   void duck(bool on);
+
+  /// Clears transient audio state before a new playthrough starts.
+  void reset();
 }
 
 /// No sound at all: the default everywhere, so tests need no audio engine.
@@ -47,6 +50,8 @@ class SilentAudio implements GameAudio {
   void uncover() {}
   @override
   void duck(bool on) {}
+  @override
+  void reset() {}
 }
 
 /// Makes the app's [GameAudio] available to every screen and button.

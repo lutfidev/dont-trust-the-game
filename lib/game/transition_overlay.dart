@@ -9,9 +9,10 @@ import 'game_controller.dart';
 /// Covers the screen while the stage changes underneath.
 ///
 /// * [TransitionKind.tear] — black bands slam shut from both sides with red
-///   scan lines, hold on a stage card, then tear open again (02 → 03).
+///   scan lines, hold on a stage card, then tear open again (02 → 03, 05 → 06).
 /// * [TransitionKind.light] — white light floods out of the door / crack,
 ///   holds on a dark stage card, then fades (03 → 04, 04 → 05).
+/// * [TransitionKind.tear] — the crack tears open into the truth room (05 → 06).
 class TransitionOverlay extends StatelessWidget {
   const TransitionOverlay(this.g, {super.key, required this.roomTop});
   final GameController g;
@@ -30,7 +31,8 @@ class TransitionOverlay extends StatelessWidget {
           builder: (context, ms, _) {
             final light = t.kind == TransitionKind.light;
             final reduced = g.glitch.reduced;
-            final hold = ms >= t.coverMs && ms < t.totalMs - t.outMs(reduced: reduced);
+            final hold =
+                ms >= t.coverMs && ms < t.totalMs - t.outMs(reduced: reduced);
             final chars = t.cardChars;
             final ink = light ? C.void_ : C.ink;
             return GestureDetector(
@@ -39,19 +41,25 @@ class TransitionOverlay extends StatelessWidget {
               child: CustomPaint(
                 size: Size.infinite,
                 painter: reduced
-                    ? _FadePainter(t, ms, light ? C.ink : const Color(0xFF050506))
+                    ? _FadePainter(
+                        t,
+                        ms,
+                        light ? C.ink : const Color(0xFF050506),
+                      )
                     : light
-                        ? _LightPainter(t, ms, t.origin.translate(0, roomTop))
-                        : _TearPainter(t, ms),
+                    ? _LightPainter(t, ms, t.origin.translate(0, roomTop))
+                    : _TearPainter(t, ms),
                 child: Center(
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 120),
                     opacity: hold ? 1 : 0,
                     child: Text.rich(
-                      TextSpan(children: [
-                        TextSpan(text: t.card.substring(0, chars)),
-                        BlinkCursor.span(12, ink),
-                      ]),
+                      TextSpan(
+                        children: [
+                          TextSpan(text: t.card.substring(0, chars)),
+                          BlinkCursor.span(12, ink),
+                        ],
+                      ),
                       style: mono(12, color: ink, tracking: .3),
                     ),
                   ),
@@ -81,9 +89,12 @@ class _FadePainter extends CustomPainter {
     final a = ms < t.coverMs
         ? _ease(ms / t.coverMs)
         : ms < out
-            ? 1.0
-            : 1 - _ease((ms - out) / fadeOutMs);
-    canvas.drawRect(Offset.zero & size, Paint()..color = color.withValues(alpha: a));
+        ? 1.0
+        : 1 - _ease((ms - out) / fadeOutMs);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = color.withValues(alpha: a),
+    );
   }
 
   @override
@@ -179,19 +190,24 @@ class _LightPainter extends CustomPainter {
       canvas.drawOval(
         rect.inflate(18 * (1 - p)),
         Paint()
-          ..shader = RadialGradient(colors: [
-            C.ink,
-            C.ink.withValues(alpha: .85),
-            C.ink.withValues(alpha: 0),
-          ], stops: const [0, .7, 1])
-              .createShader(rect.inflate(18 * (1 - p))),
+          ..shader = RadialGradient(
+            colors: [
+              C.ink,
+              C.ink.withValues(alpha: .85),
+              C.ink.withValues(alpha: 0),
+            ],
+            stops: const [0, .7, 1],
+          ).createShader(rect.inflate(18 * (1 - p))),
       );
       return;
     }
     final fadeMs = t.outMs(reduced: false);
     final fadeStart = t.totalMs - fadeMs;
     final a = ms < fadeStart ? 1.0 : 1 - _ease((ms - fadeStart) / fadeMs);
-    canvas.drawRect(Offset.zero & size, Paint()..color = C.ink.withValues(alpha: a));
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = C.ink.withValues(alpha: a),
+    );
   }
 
   @override

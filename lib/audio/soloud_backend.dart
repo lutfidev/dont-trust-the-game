@@ -23,7 +23,10 @@ class SoloudBackend implements AudioBackend {
   Future<void> init() async {
     // Every file is fetched at once, while the engine starts: on the web each
     // one is a request of its own, and one after another they take seconds.
-    final moods = [for (final m in Mood.values) if (m.asset != null) m];
+    final moods = [
+      for (final m in Mood.values)
+        if (m.asset != null) m,
+    ];
     final sfxBytes = Future.wait([for (final s in Sfx.values) _bytes(s.asset)]);
     final musicBytes = Future.wait([for (final m in moods) _bytes(m.asset!)]);
     // Not awaited until the engine is up, so a failure meanwhile must not be
@@ -31,8 +34,8 @@ class SoloudBackend implements AudioBackend {
     sfxBytes.ignore();
     musicBytes.ignore();
 
-    await _soloud.init();
     try {
+      await _soloud.init();
       _soloud
         ..setMaxActiveVoiceCount(32)
         ..filters.limiterFilter.activate(); // stacked sounds never clip
@@ -48,13 +51,17 @@ class SoloudBackend implements AudioBackend {
       // may clear while the game is running.)
       for (final (i, bytes) in (await musicBytes).indexed) {
         final m = moods[i];
-        _musicSources[m] = await _soloud.loadMem(m.asset!, bytes, mode: LoadMode.disk);
+        _musicSources[m] = await _soloud.loadMem(
+          m.asset!,
+          bytes,
+          mode: LoadMode.disk,
+        );
       }
     } catch (_) {
       // The game will stay silent: don't leave the audio device running.
-      await _soloud
-          .deinitAsync()
-          .catchError((Object e) => debugPrint('Audio shutdown: $e'));
+      await _soloud.deinitAsync().catchError(
+        (Object e) => debugPrint('Audio shutdown: $e'),
+      );
       rethrow;
     }
   }
@@ -86,7 +93,11 @@ class SoloudBackend implements AudioBackend {
 
   @override
   int startMusic(Mood mood, {required double volume}) {
-    final h = _music.play(_musicSources[mood]!, paused: true, looping: mood.loop);
+    final h = _music.play(
+      _musicSources[mood]!,
+      paused: true,
+      looping: mood.loop,
+    );
     if (_soloud.getIsValidVoiceHandle(h)) {
       // A recycled handle can inherit an old fade: reset before unpausing.
       _soloud
@@ -128,7 +139,9 @@ class SoloudBackend implements AudioBackend {
     if (h == null) return;
     if (time == Duration.zero) {
       // Asynchronous, so the director's guard can't catch its errors.
-      unawaited(_soloud.stop(h).catchError((Object e) => debugPrint('Audio: $e')));
+      unawaited(
+        _soloud.stop(h).catchError((Object e) => debugPrint('Audio: $e')),
+      );
     } else {
       _soloud.scheduleStop(h, time);
     }

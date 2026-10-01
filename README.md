@@ -26,7 +26,7 @@ Design handoff (`Dont Trust The Game.dc.html`).
 You are in a small room. A friendly terminal tells you what to do: *move right,
 open the door*. You do it. Then the instructions start to go wrong. The drawer
 code is a lie, the key is where you were told not to go, the UI slips, and the
-room starts to comment on how you play. Five stages, three endings, one
+room starts to comment on how you play. Fifteen stages, four maps, three endings, one
 lullaby that slowly falls apart.
 
 **Contents:** [Quick start](#quick-start) · [Screenshots](#screenshots) ·
@@ -40,7 +40,7 @@ lullaby that slowly falls apart.
 flutter pub get
 flutter run                               # menu → boot → stage 01
 flutter run -d chrome                     # or play it in the browser
-flutter run --dart-define=START_STAGE=3   # jump to a stage (1–4) for testing
+flutter run --dart-define=START_STAGE=3   # jump to a stage (1–15) for testing
 flutter run --dart-define=CHARACTER=cloak # player design: pill (default) | cloak | block
 flutter test
 ```
@@ -51,6 +51,7 @@ to the device.
 | Input | What it does |
 | --- | --- |
 | Tap a tile | Walk there (shortest path, 170 ms per tile). |
+| Hold the analog stick | Walk in that direction; release to stop. |
 | Tap the door, drawer or crack | Walk up to it and use it. |
 | `[ II ]` | Pause. Typing, walking, scheduled beats and glitches all freeze. |
 | Back button | Resume, close a sheet, or pause. |
@@ -74,7 +75,7 @@ to the device.
   <tr>
     <td align="center"><img src="docs/screenshots/stage3-pause.png" width="240" alt="Pause menu in stage 03"><br><sub>03 UI GL1TCH: the pause menu</sub></td>
     <td align="center"><img src="docs/screenshots/stage4-watching.png" width="240" alt="Stage 04 WATCHING"><br><sub>04 WATCHING: a crack in the wall</sub></td>
-    <td align="center"><img src="docs/screenshots/stage5-truth.png" width="240" alt="Stage 05 TRUTH"><br><sub>05 TRUTH: the secret room</sub></td>
+    <td align="center"><img src="docs/screenshots/stage5-truth.png" width="240" alt="Stage 05 TRUTH checkpoint"><br><sub>05 TRUTH: a checkpoint, not the ending</sub></td>
   </tr>
 </table>
 
@@ -91,12 +92,20 @@ to the device.
    MOVE → OBEY, and the room tears into offset slices with a red ghost. Even
    the pause menu has an opinion: *I changed the button. Did you notice?*
 4. **04 · WATCHING.** Back in room 01. `DON'T TOUCH THE WALL.` The game
-   comments on how you play: idling for 7 s (*Why are you not moving?*),
-   always going left, how often you pause. A crack appears in the wall.
-5. **05 · TRUTH.** The secret room behind the crack, its walls covered in
-   everything the game told you. No HUD, no terminal, no music.
-   *The game cannot control you if you stop listening.* Trust → loop to the
-   start; Don't trust → exit; Do nothing (or wait 12 s) → the true ending.
+  comments on how you play: idling for 7 s (*Why are you not moving?*),
+  always going left, how often you pause. Find three echo tiles to open the
+  crack in the wall.
+5. **05 · TRUTH.** A quiet checkpoint, not an ending. The walls repeat what
+  the game told you; the crack leads onward.
+6–8. **THE ARCHIVE.** Follow short tile sequences through shelves and blocked
+  aisles. The route gets longer each time.
+9–11. **THE GREENHOUSE.** New floor plan, thorn obstacles, and decoy-looking
+  paths. Read the order instead of cutting corners.
+12–14. **THE TOWER.** Timed sequences, more obstacles, and a shorter clock on
+  each level. A wrong marked tile resets progress and costs three seconds.
+15. **THE CORE.** The longest route. Finish it to reach the three endings:
+  TRUST loops to the start, DON'T TRUST exits, and DO NOTHING (or wait 12 s)
+  gives the true ending.
 
 <details>
 <summary><b>The three endings</b></summary>
@@ -137,10 +146,11 @@ it.
 kinds:
 
 - black bands tear shut for 02 → 03;
-- light floods out of the door (03 → 04) or the crack (04 → 05).
+- light floods out of the door (03 → 04);
+- the crack opens into the Truth checkpoint (04 → 05);
+- the checkpoint leads into the Archive, then the map changes at 09, 12 and 15.
 
-Both hold on a typed stage card (`03 / UI GL1TCH`, `04 / WATCHING`,
-`05 / TRUTH`). The stage swaps while the screen is fully covered, and input
+Transitions hold on a typed stage card. The stage swaps while the screen is fully covered, and input
 and pause are locked meanwhile.
 
 <br clear="right">
@@ -188,6 +198,9 @@ the *same song* decays instead of being swapped for other music:
 | 03 | Broken: bitcrushed fragments, stutters, dropouts over a dissonant drone. Glitch bursts make the music stumble. |
 | 04 | Slower and lower, notes missing (it's listening), a soft pulse. |
 | 05 | No music, only the room: "the game cannot control you if you stop listening". |
+| 06–08 | Broken lullaby beneath the Archive routes. |
+| 09–11 | Slower, lower notes in the Greenhouse. |
+| 12–15 | The broken loop returns as the Tower timer tightens, then peaks in the Core. The room tone begins only after the final route. |
 | Endings | TRUST cuts straight back to the lullaby. DON'T TRUST opens onto wind. TRUE: silence, then one pure chord, once. |
 
 - **SFX:** 28 short sounds (UI clicks, typing ticks, steps, door, drawer,
@@ -213,7 +226,7 @@ silent.
 | Path | What |
 | --- | --- |
 | `lib/room/` | The Flame world: 2:1 iso projection (`iso.dart`), the mutable `RoomScene`, and `RoomGame`: flat polygons, 3 tones per object, priority-sorted pieces, and the glitch layer (red ghost ±3px + offset horizontal slices). |
-| `lib/game/game_controller.dart` | The story state machine (01 TRUST → 05 TRUTH, 3 endings) on a pause-aware clock: typing, walking (170 ms/tile, BFS), scheduled beats and idle comments all freeze while paused. |
+| `lib/game/game_controller.dart`, `route_challenge.dart` | The 15-stage story and data-driven route levels, on a pause-aware clock with obstacle-aware BFS, escalating timers, and three endings after stage 15. |
 | `lib/game/overlays.dart` | Flutter overlays over the `GameWidget`: HUD, terminal, pause, drawer puzzle, log, truth choice, endings. |
 | `lib/game/glitch.dart`, `transition_overlay.dart` | The glitch director and the stage transitions. |
 | `lib/audio/` | Audio: cue catalog (`Sfx`, `Mood`), the `GameAudio` interface, `AudioDirector` (crossfades, tape-stop, ducking, cooldowns, settings) and the flutter_soloud backend. |

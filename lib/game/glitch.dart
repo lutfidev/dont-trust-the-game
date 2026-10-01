@@ -15,7 +15,7 @@ class GlitchFx {
 
 /// How unstable the game currently allows itself to look.
 enum Unease {
-  /// 01 TRUST, 05 TRUTH: perfectly still.
+  /// 01 TRUST, 05 TRUTH checkpoint: perfectly still.
   none(0, 0, 0, 0),
 
   /// 02 after "I LIED.": rare, tiny bursts. The pause button flickers once.
@@ -120,10 +120,13 @@ class GlitchDirector {
     if (!bursting || s.isEmpty) return s;
     const glyphs = '#%01/\\_=+';
     final r = math.Random(seed);
-    return String.fromCharCodes(s.codeUnits.map((c) =>
-        c != 32 && r.nextDouble() < amount
+    return String.fromCharCodes(
+      s.codeUnits.map(
+        (c) => c != 32 && r.nextDouble() < amount
             ? glyphs.codeUnitAt(r.nextInt(glyphs.length))
-            : c));
+            : c,
+      ),
+    );
   }
 
   // ------------------------------------------------------------ internals
@@ -145,13 +148,18 @@ class GlitchDirector {
         (
           y: 90 + _rnd.nextDouble() * 210,
           h: 4 + _rnd.nextDouble() * (heavy ? 14 : 8),
-          dx: (_rnd.nextBool() ? 1 : -1) * (4 + _rnd.nextDouble() * (heavy ? 12 : 6)),
+          dx:
+              (_rnd.nextBool() ? 1 : -1) *
+              (4 + _rnd.nextDouble() * (heavy ? 12 : 6)),
         ),
     ];
     fx.ghostDx = -(3 + _rnd.nextDouble() * (heavy ? 5 : 2));
     fx.ghostOpacity = heavy ? .32 : .22;
     final j = heavy ? 3.0 : 1.5;
-    jitter = Offset((_rnd.nextDouble() * 2 - 1) * j, (_rnd.nextDouble() * 2 - 1) * j * .6);
+    jitter = Offset(
+      (_rnd.nextDouble() * 2 - 1) * j,
+      (_rnd.nextDouble() * 2 - 1) * j * .6,
+    );
   }
 
   /// Between bursts: stage 03–04 keep the design's steady light slices + ghost.
@@ -170,8 +178,7 @@ class GlitchDirector {
     }
   }
 
-  void _scheduleNext() =>
-      _untilNext = _range(_unease.gapMin, _unease.gapMax);
+  void _scheduleNext() => _untilNext = _range(_unease.gapMin, _unease.gapMax);
 
   int _range(int a, int b) => a + (b > a ? _rnd.nextInt(b - a) : 0);
 }

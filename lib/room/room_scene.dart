@@ -4,6 +4,8 @@ import '../game/glitch.dart';
 import '../theme.dart';
 import 'character.dart';
 
+enum RoomMap { home, truth, archive, greenhouse, tower, core }
+
 class Tile {
   const Tile(this.i, this.j);
   final int i;
@@ -29,13 +31,15 @@ class TileHighlight {
 /// Text scratched onto a wall. [wall] is 'r' (right/back wall along i) or
 /// 'l' (left wall along j); [at] is the tile coordinate along that wall.
 class WallText {
-  const WallText(this.text,
-      {required this.wall,
-      required this.at,
-      required this.z,
-      this.size = 8,
-      this.opacity = .3,
-      this.color = C.ink});
+  const WallText(
+    this.text, {
+    required this.wall,
+    required this.at,
+    required this.z,
+    this.size = 8,
+    this.opacity = .3,
+    this.color = C.ink,
+  });
   final String text;
   final String wall;
   final double at;
@@ -64,6 +68,8 @@ class RoomScene {
     this.noCabinet = false,
     this.noLamp = false,
     this.wallText = const [],
+    this.map = RoomMap.home,
+    this.obstacles = const [],
   });
 
   Tile? player;
@@ -89,6 +95,8 @@ class RoomScene {
   bool noCabinet;
   bool noLamp;
   List<WallText> wallText;
+  RoomMap map;
+  List<Tile> obstacles;
 
   void Function(Tile tile)? onTile;
   VoidCallback? onDoor;
@@ -116,5 +124,11 @@ const truthWallText = [
 
 /// The real drawer code, faintly scratched on the right wall in stage 02.
 /// Kept compact and left of the door so no digit is hidden behind the frame.
-const codeWallText =
-    WallText('4·0·7·1', wall: 'r', at: .95, z: 58, size: 11, opacity: .3);
+const codeWallText = WallText(
+  '4·0·7·1',
+  wall: 'r',
+  at: .95,
+  z: 58,
+  size: 11,
+  opacity: .3,
+);
