@@ -36,6 +36,12 @@ void main() {
 
   test('only the true ending is a one-shot, and silence has no file', () {
     expect(Mood.silence.asset, isNull);
-    expect([for (final m in Mood.values) if (!m.loop) m], [Mood.truthEnd]);
+    expect(
+      [
+        for (final m in Mood.values)
+          if (!m.loop) m,
+      ],
+      [Mood.truthEnd],
+    );
   });
 }

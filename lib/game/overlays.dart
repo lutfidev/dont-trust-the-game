@@ -21,6 +21,7 @@ class Hud extends StatelessWidget {
     2: '02 / FIRST LIE',
     3: '03 / UI GL1TCH',
     4: '04 / WATCHING',
+    5: '05 / TRUTH',
   };
 
   @override
@@ -34,17 +35,25 @@ class Hud extends StatelessWidget {
     final labelText = switch (stage) {
       3 => fx.flicker(_labels[3]!, '03 / UI GLITCH', k: 1),
       4 => fx.flicker(_labels[4]!, '04 / I SEE YOU', k: 1, chance: .45),
+      _ when stage >= 6 => g.routeName ?? '$stage / THE ROUTE',
       _ => _labels[stage] ?? '',
     };
     final label = StageLabel(labelText, dot, dotAfter: stage == 3);
-    final VoidCallback? onTap =
-        forceTrust ? null : (g.paused ? g.resume : g.pause);
+    final VoidCallback? onTap = forceTrust
+        ? null
+        : (g.paused ? g.resume : g.pause);
     final text = g.paused && !forceTrust
         ? '[ ▸ ]'
         : switch (stage) {
             2 => fx.flicker('[ II ]', '[ TRUST ME ]', k: 2, chance: .8),
             3 => fx.flicker('[ TRUST ME ]', '[ II ]', k: 2, chance: .5),
             4 => fx.flicker('[ TRUST ME ]', '[ WATCHING ]', k: 2, chance: .5),
+            _ when stage >= 6 && stage < 15 => fx.flicker(
+              '[ TRUST ME ]',
+              '[ FOLLOW ]',
+              k: 2,
+              chance: .5,
+            ),
             _ => '[ II ]',
           };
 
@@ -54,24 +63,71 @@ class Hud extends StatelessWidget {
         offset: const Offset(3, 2),
         child: Transform.rotate(
           angle: -1.5 * math.pi / 180,
-          child: HudButton(text,
-              onTap: onTap,
-              border: const Color(0xFF4A2426),
-              shadows: const [Shadow(color: C.warn, offset: Offset(-2, 0))]),
+          child: HudButton(
+            text,
+            onTap: onTap,
+            border: const Color(0xFF4A2426),
+            shadows: const [Shadow(color: C.warn, offset: Offset(-2, 0))],
+          ),
         ),
       );
-      return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [btn, label]);
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [btn, label],
+      );
     }
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         label,
-        HudButton(text,
-            onTap: onTap,
-            shadows: lying ? const [Shadow(color: C.warn, offset: Offset(-2, 0))] : null),
+        HudButton(
+          text,
+          onTap: onTap,
+          shadows: lying
+              ? const [Shadow(color: C.warn, offset: Offset(-2, 0))]
+              : null,
+        ),
       ],
     );
   }
+}
+
+class StageProgress extends StatelessWidget {
+  const StageProgress({
+    super.key,
+    required this.label,
+    required this.progress,
+    required this.total,
+    this.timeRemaining,
+  });
+
+  final String label;
+  final int progress;
+  final int total;
+  final int? timeRemaining;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Text(label, style: mono(9, color: C.warn, tracking: .12)),
+      const Spacer(),
+      for (var index = 0; index < total; index++) ...[
+        Container(
+          width: total > 5 ? 10 : 24,
+          height: 4,
+          color: index < progress ? C.warn : C.line,
+        ),
+        if (index + 1 < total) const SizedBox(width: 4),
+      ],
+      const SizedBox(width: 8),
+      Text(
+        timeRemaining == null
+            ? '$progress/$total'
+            : '$progress/$total  ${timeRemaining}s',
+        style: mono(9, color: C.muted),
+      ),
+    ],
+  );
 }
 
 // ------------------------------------------------------------------ Terminal
@@ -90,7 +146,7 @@ class Terminal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final glitch = g.stage == 3;
+    final glitch = g.stage == 3 || g.stage == 5;
     final dialogue = g.continuePrompt;
     final cur = g.current;
     final prev = g.log.length > 1
@@ -111,76 +167,100 @@ class Terminal extends StatelessWidget {
       height: dialogue ? 330 : 270,
       decoration: BoxDecoration(
         color: C.panel,
-        border: glitch ? null : const Border(top: BorderSide(color: C.terminalTop)),
+        border: glitch
+            ? null
+            : const Border(top: BorderSide(color: C.terminalTop)),
       ),
-      child: Stack(children: [
-        if (glitch) ...[
-          const FractionallySizedBox(
-              widthFactor: .58, child: SizedBox(height: 1, child: ColoredBox(color: C.line))),
-          const Positioned(
-            top: 4,
-            left: 360 * .58,
-            right: 0,
-            child: SizedBox(height: 1, child: ColoredBox(color: Color(0xFF3A2224))),
-          ),
-        ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 26),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(header,
-                      style: mono(10,
-                          tracking: .24,
-                          color: cur.kind == LineKind.lie ? C.warn : C.muted)),
-                  Text(lineNo, style: mono(10, tracking: .24, color: C.muted)),
-                ],
+      child: Stack(
+        children: [
+          if (glitch) ...[
+            const FractionallySizedBox(
+              widthFactor: .58,
+              child: SizedBox(height: 1, child: ColoredBox(color: C.line)),
+            ),
+            const Positioned(
+              top: 4,
+              left: 360 * .58,
+              right: 0,
+              child: SizedBox(
+                height: 1,
+                child: ColoredBox(color: Color(0xFF3A2224)),
               ),
-              for (final l in prev) ...[
-                SizedBox(height: dialogue ? 12 : 10),
-                Text(
-                  l.display,
-                  style: l.isVoice
-                      ? serif(14, color: C.muted, height: 1.2)
-                      : mono(12,
-                          height: 1.4,
-                          color: l.kind == LineKind.lie ? C.warn : C.muted),
+            ),
+          ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 26),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      header,
+                      style: mono(
+                        10,
+                        tracking: .24,
+                        color: cur.kind == LineKind.lie ? C.warn : C.muted,
+                      ),
+                    ),
+                    Text(
+                      lineNo,
+                      style: mono(10, tracking: .24, color: C.muted),
+                    ),
+                  ],
                 ),
-              ],
-              SizedBox(height: dialogue ? 12 : 10),
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 52),
-                child: _CurrentLine(g, glitch: glitch),
-              ),
-              const Spacer(),
-              if (dialogue)
-                Row(children: [
-                  Expanded(
-                    child: BlockButton('[ CONTINUE ]',
-                        arrow: true,
+                for (final l in prev) ...[
+                  SizedBox(height: dialogue ? 12 : 10),
+                  Text(
+                    l.display,
+                    style: l.isVoice
+                        ? serif(14, color: C.muted, height: 1.2)
+                        : mono(
+                            12,
+                            height: 1.4,
+                            color: l.kind == LineKind.lie ? C.warn : C.muted,
+                          ),
+                  ),
+                ],
+                SizedBox(height: dialogue ? 12 : 10),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: _CurrentLine(g, glitch: glitch),
+                ),
+                const Spacer(),
+                if (dialogue)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: BlockButton(
+                          '[ CONTINUE ]',
+                          arrow: true,
+                          padding: 16,
+                          tracking: .18,
+                          borderColor: C.borderBtn,
+                          onTap: g.onContinue,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      BlockButton(
+                        '[ LOG ]',
+                        kind: BtnKind.muted,
                         padding: 16,
                         tracking: .18,
-                        borderColor: C.borderBtn,
-                        onTap: g.onContinue),
-                  ),
-                  const SizedBox(width: 8),
-                  BlockButton('[ LOG ]',
-                      kind: BtnKind.muted,
-                      padding: 16,
-                      tracking: .18,
-                      expand: false,
-                      borderColor: C.line,
-                      onTap: g.showLog),
-                ])
-              else
-                _Footer(g, swapped: glitch),
-            ],
+                        expand: false,
+                        borderColor: C.line,
+                        onTap: g.showLog,
+                      ),
+                    ],
+                  )
+                else
+                  _Footer(g, swapped: glitch),
+              ],
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -195,7 +275,11 @@ class _CurrentLine extends StatelessWidget {
     final cur = g.current;
     final voice = cur.isVoice;
     final lie = cur.kind == LineKind.lie;
-    final size = voice ? 28.0 : lie ? 30.0 : 20.0;
+    final size = voice
+        ? 28.0
+        : lie
+        ? 30.0
+        : 20.0;
     final color = Terminal._colors[cur.kind]!;
     final prefix = voice ? '' : '> ';
     var shown = prefix + cur.text.substring(0, g.typed);
@@ -203,12 +287,14 @@ class _CurrentLine extends StatelessWidget {
     if (g.stage >= 3 && !voice) shown = g.glitch.scramble(shown, amount: .1);
     final style = voice
         ? serif(size, color: color, height: 1.2)
-        : mono(size,
+        : mono(
+            size,
             color: color,
             tracking: .02,
             weight: lie ? FontWeight.w600 : FontWeight.w500,
             height: 1.2,
-            shadows: glitch ? _redGhost : null);
+            shadows: glitch ? _redGhost : null,
+          );
 
     final spans = <InlineSpan>[];
     final door = glitch ? (prefix + cur.text).indexOf('DOOR') : -1;
@@ -216,14 +302,19 @@ class _CurrentLine extends StatelessWidget {
       // "D0OR": one glyph swaps for a red zero and jumps 3px.
       spans
         ..add(TextSpan(text: shown.substring(0, door + 1)))
-        ..add(WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Transform.translate(
-            offset: const Offset(0, -3),
-            child: Text('0', style: style.copyWith(color: C.warn, shadows: const [])),
+        ..add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Transform.translate(
+              offset: const Offset(0, -3),
+              child: Text(
+                '0',
+                style: style.copyWith(color: C.warn, shadows: const []),
+              ),
+            ),
           ),
-        ))
+        )
         ..add(TextSpan(text: shown.substring(door + 2)));
     } else {
       spans.add(TextSpan(text: shown));
@@ -232,20 +323,24 @@ class _CurrentLine extends StatelessWidget {
 
     final text = Text.rich(TextSpan(children: spans), style: style);
     final cmd = cur.text;
-    if (!glitch || !(cmd.contains('OPEN THE DOOR') || cmd.contains('TRUST ME'))) {
+    if (!glitch ||
+        !(cmd.contains('OPEN THE DOOR') || cmd.contains('TRUST ME'))) {
       return text;
     }
-    return Stack(clipBehavior: Clip.none, children: [
-      text,
-      Positioned(
-        top: -15,
-        left: 30,
-        child: Opacity(
-          opacity: .75,
-          child: Text("DON'T", style: mono(11, color: C.warn, tracking: .2)),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        text,
+        Positioned(
+          top: -15,
+          left: 30,
+          child: Opacity(
+            opacity: .75,
+            child: Text("DON'T", style: mono(11, color: C.warn, tracking: .2)),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -259,34 +354,43 @@ class _Footer extends StatelessWidget {
     final fx = g.glitch;
     final obey = g.stage >= 3;
     final verb = obey ? fx.flicker('OBEY', 'MOVE', k: 5, chance: .5) : 'MOVE';
-    final watching = g.stage == 4 &&
-        fx.flicker('', 'x', k: 6, chance: .35).isNotEmpty;
+    final watching =
+        g.stage == 4 && fx.flicker('', 'x', k: 6, chance: .35).isNotEmpty;
     final hint = watching
-        ? Text("I KNOW WHERE YOU'LL TAP", style: mono(10, color: C.warn, tracking: .18))
+        ? Text(
+            "I KNOW WHERE YOU'LL TAP",
+            style: mono(10, color: C.warn, tracking: .18),
+          )
         : Text.rich(
-            TextSpan(children: [
-              const TextSpan(text: 'TAP A TILE TO '),
-              TextSpan(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'TAP A TILE TO '),
+                TextSpan(
                   text: verb,
-                  style: TextStyle(color: verb == 'OBEY' ? C.warn : C.muted)),
-            ]),
+                  style: TextStyle(color: verb == 'OBEY' ? C.warn : C.muted),
+                ),
+              ],
+            ),
             style: mono(10, color: C.muted, tracking: .18),
           );
-    final slots = Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(border: Border.all(color: C.line)),
-        child: Text(g.hasKey ? 'KEY' : '', style: mono(9, tracking: .1)),
-      ),
-      const SizedBox(width: 6),
-      Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(border: Border.all(color: C.rule)),
-      ),
-    ]);
+    final slots = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(border: Border.all(color: C.line)),
+          child: Text(g.hasKey ? 'KEY' : '', style: mono(9, tracking: .1)),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(border: Border.all(color: C.rule)),
+        ),
+      ],
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: swapped ? [slots, hint] : [hint, slots],
@@ -297,7 +401,12 @@ class _Footer extends StatelessWidget {
 // ------------------------------------------------------------------ Pause
 
 class PauseOverlay extends StatelessWidget {
-  const PauseOverlay(this.g, {super.key, required this.onSettings, required this.onMenu});
+  const PauseOverlay(
+    this.g, {
+    super.key,
+    required this.onSettings,
+    required this.onMenu,
+  });
   final GameController g;
   final VoidCallback onSettings;
   final VoidCallback onMenu;
@@ -323,19 +432,28 @@ class PauseOverlay extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(g.stage == 3 ? 'TRUST ME' : 'PAUSED',
-              style: mono(11, color: C.muted, tracking: .3)),
+          Text(
+            g.stage == 3 ? 'TRUST ME' : 'PAUSED',
+            style: mono(11, color: C.muted, tracking: .3),
+          ),
           if (comment.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(comment, style: serif(34, height: 1.1)),
           ],
           if (g.stage == 4) ...[
             const SizedBox(height: 10),
-            Text('> YOU PAUSED ${g.pauses} ${g.pauses == 1 ? 'TIME' : 'TIMES'}.',
-                style: mono(11, color: C.muted, tracking: .16)),
+            Text(
+              '> YOU PAUSED ${g.pauses} ${g.pauses == 1 ? 'TIME' : 'TIMES'}.',
+              style: mono(11, color: C.muted, tracking: .16),
+            ),
           ],
           const SizedBox(height: 36),
-          BlockButton('[ RESUME ]', kind: BtnKind.primary, arrow: true, onTap: g.resume),
+          BlockButton(
+            '[ RESUME ]',
+            kind: BtnKind.primary,
+            arrow: true,
+            onTap: g.resume,
+          ),
           const SizedBox(height: 10),
           BlockButton('[ SETTINGS ]', onTap: onSettings),
           const SizedBox(height: 10),
@@ -367,7 +485,10 @@ class SheetHost extends StatelessWidget {
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, a) => SlideTransition(
-          position: Tween(begin: const Offset(0, 1), end: Offset.zero).animate(a),
+          position: Tween(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(a),
           child: child,
         ),
         child: sheet ?? const SizedBox.shrink(),
@@ -377,7 +498,11 @@ class SheetHost extends StatelessWidget {
 }
 
 class _Sheet extends StatelessWidget {
-  const _Sheet({required this.title, required this.onClose, required this.child});
+  const _Sheet({
+    required this.title,
+    required this.onClose,
+    required this.child,
+  });
   final String title;
   final VoidCallback onClose;
   final Widget child;
@@ -438,23 +563,33 @@ class PuzzleSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('> THE CODE IS 1-2-3-4.', style: mono(16, weight: FontWeight.w500)),
+          Text(
+            '> THE CODE IS 1-2-3-4.',
+            style: mono(16, weight: FontWeight.w500),
+          ),
           const SizedBox(height: 4),
           Text('> TRUST ME.', style: mono(12, color: C.muted)),
           const SizedBox(height: 14),
-          Row(children: [
-            for (var k = 0; k < 4; k++) ...[
-              if (k > 0) const SizedBox(width: 10),
-              Expanded(child: _Dial(g.dials[k], (d) => g.dial(k, d))),
+          Row(
+            children: [
+              for (var k = 0; k < 4; k++) ...[
+                if (k > 0) const SizedBox(width: 10),
+                Expanded(child: _Dial(g.dials[k], (d) => g.dial(k, d))),
+              ],
             ],
-          ]),
+          ),
           const SizedBox(height: 14),
           SizedBox(
             height: 16,
             child: Text(msg, style: mono(11, color: color, tracking: .14)),
           ),
           const Spacer(),
-          BlockButton('[ UNLOCK ]', kind: BtnKind.primary, center: true, onTap: g.unlock),
+          BlockButton(
+            '[ UNLOCK ]',
+            kind: BtnKind.primary,
+            center: true,
+            onTap: g.unlock,
+          ),
         ],
       ),
     );
@@ -467,31 +602,33 @@ class _Dial extends StatelessWidget {
   final ValueChanged<int> onStep;
 
   Widget _arrow(String s, int d) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => onStep(d),
-        child: SizedBox(
-          height: 36,
-          child: Center(child: glyphText(s, mono(10, color: C.dim))),
-        ),
-      );
+    behavior: HitTestBehavior.opaque,
+    onTap: () => onStep(d),
+    child: SizedBox(
+      height: 36,
+      child: Center(child: glyphText(s, mono(10, color: C.dim))),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(border: Border.all(color: C.line)),
-        child: Column(children: [
-          _arrow('▲', 1),
-          Container(
-            height: 58,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: C.void_,
-              border: Border.symmetric(horizontal: BorderSide(color: C.rule)),
-            ),
-            child: Text('$value', style: mono(32, weight: FontWeight.w500)),
+    decoration: BoxDecoration(border: Border.all(color: C.line)),
+    child: Column(
+      children: [
+        _arrow('▲', 1),
+        Container(
+          height: 58,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: C.void_,
+            border: Border.symmetric(horizontal: BorderSide(color: C.rule)),
           ),
-          _arrow('▼', -1),
-        ]),
-      );
+          child: Text('$value', style: mono(32, weight: FontWeight.w500)),
+        ),
+        _arrow('▼', -1),
+      ],
+    ),
+  );
 }
 
 class LogSheet extends StatelessWidget {
@@ -500,30 +637,32 @@ class LogSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Sheet(
-        title: 'LOG',
-        onClose: g.closeOverlay,
-        child: ListView(
-          reverse: true,
-          padding: const EdgeInsets.only(top: 8),
-          children: [
-            for (final l in g.log.reversed)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  l.display,
-                  style: l.isVoice
-                      ? serif(16, color: C.ink)
-                      : mono(12,
-                          height: 1.4,
-                          color: l.kind == LineKind.lie ? C.warn : C.dim),
-                ),
-              ),
-          ],
-        ),
-      );
+    title: 'LOG',
+    onClose: g.closeOverlay,
+    child: ListView(
+      reverse: true,
+      padding: const EdgeInsets.only(top: 8),
+      children: [
+        for (final l in g.log.reversed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              l.display,
+              style: l.isVoice
+                  ? serif(16, color: C.ink)
+                  : mono(
+                      12,
+                      height: 1.4,
+                      color: l.kind == LineKind.lie ? C.warn : C.dim,
+                    ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
-// ------------------------------------------------------------------ 05 Truth
+// ------------------------------------------------------------------ 15 Final choice
 
 class TruthChoice extends StatelessWidget {
   const TruthChoice(this.g, {super.key});
@@ -552,26 +691,34 @@ class TruthChoice extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('The game cannot control you if you stop listening.',
-                  style: serif(31, height: 1.12)),
+              Text(
+                'The game cannot control you if you stop listening.',
+                style: serif(31, height: 1.12),
+              ),
               const SizedBox(height: 28),
-              BlockButton('[ TRUST THE GAME ]',
-                  height: 50,
-                  tracking: .18,
-                  borderColor: C.borderBtn,
-                  onTap: () => g.choose(GameOverlay.endTrust)),
+              BlockButton(
+                '[ TRUST THE GAME ]',
+                height: 50,
+                tracking: .18,
+                borderColor: C.borderBtn,
+                onTap: () => g.choose(GameOverlay.endTrust),
+              ),
               const SizedBox(height: 10),
-              BlockButton("[ DON'T TRUST THE GAME ]",
-                  height: 50,
-                  tracking: .18,
-                  borderColor: C.borderBtn,
-                  onTap: () => g.choose(GameOverlay.endDont)),
+              BlockButton(
+                "[ DON'T TRUST THE GAME ]",
+                height: 50,
+                tracking: .18,
+                borderColor: C.borderBtn,
+                onTap: () => g.choose(GameOverlay.endDont),
+              ),
               const SizedBox(height: 10),
-              BlockButton('[ DO NOTHING ]',
-                  kind: BtnKind.dashed,
-                  height: 50,
-                  tracking: .18,
-                  onTap: () => g.choose(GameOverlay.endTrue)),
+              BlockButton(
+                '[ DO NOTHING ]',
+                kind: BtnKind.dashed,
+                height: 50,
+                tracking: .18,
+                onTap: () => g.choose(GameOverlay.endTrue),
+              ),
             ],
           ),
         ),
@@ -588,38 +735,45 @@ class TrustEndingTerminal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 270,
-        decoration: const BoxDecoration(
-          color: C.panel,
-          border: Border(top: BorderSide(color: C.terminalTop)),
-        ),
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 26),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    height: 270,
+    decoration: const BoxDecoration(
+      color: C.panel,
+      border: Border(top: BorderSide(color: C.terminalTop)),
+    ),
+    padding: const EdgeInsets.fromLTRB(22, 20, 22, 26),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('SYSTEM', style: mono(10, tracking: .24, color: C.muted)),
-                Text('L.001', style: mono(10, tracking: .24, color: C.muted)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text('> YOU DID EVERYTHING I ASKED.',
-                style: mono(21, weight: FontWeight.w500, height: 1.25)),
-            const SizedBox(height: 10),
-            Text.rich(
-              TextSpan(children: [
-                const TextSpan(text: '> RETURNING TO ROOM 01'),
-                BlinkCursor.span(12, C.muted),
-              ]),
-              style: mono(12, color: C.muted),
-            ),
-            const Spacer(),
-            Text('ENDING 1 / 3 · LOOP', style: mono(10, color: C.muted, tracking: .3)),
+            Text('SYSTEM', style: mono(10, tracking: .24, color: C.muted)),
+            Text('L.001', style: mono(10, tracking: .24, color: C.muted)),
           ],
         ),
-      );
+        const SizedBox(height: 10),
+        Text(
+          '> YOU DID EVERYTHING I ASKED.',
+          style: mono(21, weight: FontWeight.w500, height: 1.25),
+        ),
+        const SizedBox(height: 10),
+        Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: '> RETURNING TO ROOM 01'),
+              BlinkCursor.span(12, C.muted),
+            ],
+          ),
+          style: mono(12, color: C.muted),
+        ),
+        const Spacer(),
+        Text(
+          'ENDING 1 / 3 · LOOP',
+          style: mono(10, color: C.muted, tracking: .3),
+        ),
+      ],
+    ),
+  );
 }
 
 /// E2 — the terminal is gone; the open door is the only light.
@@ -629,23 +783,33 @@ class DontTrustEnding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _FadeIn(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('EXIT FOUND', style: mono(10, color: C.safe, tracking: .3)),
-            const SizedBox(height: 14),
-            Text('YOU STOPPED LISTENING.',
-                style: mono(28, weight: FontWeight.w600, height: 1.1)),
-            const SizedBox(height: 14),
-            Text('> THE DOOR WAS NEVER LOCKED.', style: mono(12, color: C.dim)),
-            const SizedBox(height: 36),
-            BlockButton('[ LEAVE ]', kind: BtnKind.primary, arrow: true, onTap: onLeave),
-            const SizedBox(height: 14),
-            Text('ENDING 2 / 3 · EXIT', style: mono(10, color: C.muted, tracking: .3)),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('EXIT FOUND', style: mono(10, color: C.safe, tracking: .3)),
+        const SizedBox(height: 14),
+        Text(
+          'YOU STOPPED LISTENING.',
+          style: mono(28, weight: FontWeight.w600, height: 1.1),
         ),
-      );
+        const SizedBox(height: 14),
+        Text('> THE DOOR WAS NEVER LOCKED.', style: mono(12, color: C.dim)),
+        const SizedBox(height: 36),
+        BlockButton(
+          '[ LEAVE ]',
+          kind: BtnKind.primary,
+          arrow: true,
+          onTap: onLeave,
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'ENDING 2 / 3 · EXIT',
+          style: mono(10, color: C.muted, tracking: .3),
+        ),
+      ],
+    ),
+  );
 }
 
 /// E3 — no walls, no buttons. The game stops giving instructions; any tap
@@ -665,7 +829,10 @@ class _TrueEndingState extends State<TrueEnding> {
   @override
   void initState() {
     super.initState();
-    _t = Timer(const Duration(milliseconds: 2500), () => setState(() => _ready = true));
+    _t = Timer(
+      const Duration(milliseconds: 2500),
+      () => setState(() => _ready = true),
+    );
   }
 
   @override
@@ -676,29 +843,36 @@ class _TrueEndingState extends State<TrueEnding> {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _ready ? widget.onDone : null,
-        child: Stack(children: [
-          Positioned(
-            left: 30,
-            right: 30,
-            bottom: 52,
-            child: _FadeIn(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('You figured it out.', style: serif(40, height: 1.05)),
-                  const SizedBox(height: 12),
-                  Text("You don't have to play by my rules.",
-                      style: serif(24, color: C.dim, height: 1.2)),
-                  const SizedBox(height: 54),
-                  Text('ENDING 3 / 3 · TRUE', style: mono(10, color: C.muted, tracking: .3)),
-                ],
-              ),
+    behavior: HitTestBehavior.opaque,
+    onTap: _ready ? widget.onDone : null,
+    child: Stack(
+      children: [
+        Positioned(
+          left: 30,
+          right: 30,
+          bottom: 52,
+          child: _FadeIn(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('You figured it out.', style: serif(40, height: 1.05)),
+                const SizedBox(height: 12),
+                Text(
+                  "You don't have to play by my rules.",
+                  style: serif(24, color: C.dim, height: 1.2),
+                ),
+                const SizedBox(height: 54),
+                Text(
+                  'ENDING 3 / 3 · TRUE',
+                  style: mono(10, color: C.muted, tracking: .3),
+                ),
+              ],
             ),
           ),
-        ]),
-      );
+        ),
+      ],
+    ),
+  );
 }
 
 class _FadeIn extends StatelessWidget {
@@ -707,10 +881,10 @@ class _FadeIn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 900),
-        curve: Curves.easeOut,
-        builder: (_, v, c) => Opacity(opacity: v, child: c),
-        child: child,
-      );
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 900),
+    curve: Curves.easeOut,
+    builder: (_, v, c) => Opacity(opacity: v, child: c),
+    child: child,
+  );
 }

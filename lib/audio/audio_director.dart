@@ -39,11 +39,15 @@ typedef Schedule = void Function(Duration delay, VoidCallback run);
 /// nothing new plays; the game keeps running, so the mood it asks for
 /// meanwhile starts on [resume].
 class AudioDirector implements GameAudio {
-  AudioDirector(this._backend, this._settings,
-      {math.Random? random, int Function()? now, Schedule? schedule})
-      : _rnd = random ?? math.Random(),
-        _now = now ?? _stopwatch(),
-        _schedule = schedule ?? ((d, run) => Timer(d, run));
+  AudioDirector(
+    this._backend,
+    this._settings, {
+    math.Random? random,
+    int Function()? now,
+    Schedule? schedule,
+  }) : _rnd = random ?? math.Random(),
+       _now = now ?? _stopwatch(),
+       _schedule = schedule ?? ((d, run) => Timer(d, run));
 
   final AudioBackend _backend;
   final SettingsStore _settings;
@@ -164,9 +168,13 @@ class AudioDirector implements GameAudio {
           }
         });
       default:
-        final v = _voice = _engine(() => _backend.startMusic(m, volume: cut ? 1 : 0));
+        final v = _voice = _engine(
+          () => _backend.startMusic(m, volume: cut ? 1 : 0),
+        );
         if (v != null && !cut) {
-          _engine(() => _backend.fadeVolume(v, 1, Duration(milliseconds: m.fadeInMs)));
+          _engine(
+            () => _backend.fadeVolume(v, 1, Duration(milliseconds: m.fadeInMs)),
+          );
         }
     }
   }
@@ -186,8 +194,12 @@ class AudioDirector implements GameAudio {
     _voice = null;
     _generation++;
     _playing = Mood.silence;
-    _engine(() => _backend.fadeSpeed(v, .05, const Duration(milliseconds: 900)));
-    _engine(() => _backend.fadeVolume(v, 0, const Duration(milliseconds: 1000)));
+    _engine(
+      () => _backend.fadeSpeed(v, .05, const Duration(milliseconds: 900)),
+    );
+    _engine(
+      () => _backend.fadeVolume(v, 0, const Duration(milliseconds: 1000)),
+    );
     _engine(() => _backend.stopAfter(v, const Duration(milliseconds: 1000)));
   }
 
@@ -221,10 +233,29 @@ class AudioDirector implements GameAudio {
     if (_ready) _engine(() => _backend.fadeMusicBus(_musicBus, duckTime));
   }
 
-  double get _musicBus => volumeGain(_settings.music) * (_ducked ? duckLevel : 1);
+  @override
+  void reset() {
+    _generation++;
+    _stopVoice(Duration.zero);
+    _want = _playing = Mood.silence;
+    _covered = false;
+    _last.clear();
+    _assist = _settings.assist;
+    if (_ducked) {
+      _ducked = false;
+      if (_ready) _applyBus();
+    }
+  }
 
-  void _applyBus() => _engine(() =>
-      _backend.setBusVolumes(music: _musicBus, sfx: volumeGain(_settings.sfx)));
+  double get _musicBus =>
+      volumeGain(_settings.music) * (_ducked ? duckLevel : 1);
+
+  void _applyBus() => _engine(
+    () => _backend.setBusVolumes(
+      music: _musicBus,
+      sfx: volumeGain(_settings.sfx),
+    ),
+  );
 
   void _onSettings() {
     _applyBus();

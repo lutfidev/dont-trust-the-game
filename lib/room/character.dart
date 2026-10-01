@@ -50,7 +50,13 @@ const _dark = Color(0xFF16161A);
 
 /// Paints one frame with the feet at the canvas origin.
 /// [t] is the phase within the pose cycle, 0 ≤ t < 1.
-void paintCharacter(Canvas c, CharacterStyle style, Facing f, Pose pose, double t) {
+void paintCharacter(
+  Canvas c,
+  CharacterStyle style,
+  Facing f,
+  Pose pose,
+  double t,
+) {
   final walk = pose == Pose.walk;
   final w = 2 * math.pi * t;
 
@@ -63,7 +69,11 @@ void paintCharacter(Canvas c, CharacterStyle style, Facing f, Pose pose, double 
   // Shadow stays on the floor and shrinks as the body lifts.
   final shadow = 1 + bob / 22;
   c.drawOval(
-    Rect.fromCenter(center: Offset.zero, width: 20 * shadow, height: 10 * shadow),
+    Rect.fromCenter(
+      center: Offset.zero,
+      width: 20 * shadow,
+      height: 10 * shadow,
+    ),
     Paint()..color = const Color(0x8C000000),
   );
 
@@ -94,19 +104,31 @@ void paintCharacter(Canvas c, CharacterStyle style, Facing f, Pose pose, double 
   c.restore();
 }
 
-Paint _grad(Rect r) => Paint()
-  ..shader = Gradient.linear(r.centerLeft, r.centerRight, const [_hi, _lo]);
+Paint _grad(Rect r) =>
+    Paint()
+      ..shader = Gradient.linear(r.centerLeft, r.centerRight, const [_hi, _lo]);
 
 void _pill(Canvas c, Facing f, double headDy) {
   const body = Rect.fromLTWH(-6.5, -25, 13, 21);
-  c.drawRRect(RRect.fromRectAndRadius(body, const Radius.circular(6.5)), _grad(body));
+  c.drawRRect(
+    RRect.fromRectAndRadius(body, const Radius.circular(6.5)),
+    _grad(body),
+  );
   final head = Offset(0, -31 + headDy);
-  c.drawCircle(head, 5.5, Paint()..color = f.front ? _ink : const Color(0xFFE2DED5));
+  c.drawCircle(
+    head,
+    5.5,
+    Paint()..color = f.front ? _ink : const Color(0xFFE2DED5),
+  );
   if (f.front) {
     // A small dark visor shows which way it looks.
     c.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: head + Offset(f.dx * 2, .4), width: 4.4, height: 1.8),
+        Rect.fromCenter(
+          center: head + Offset(f.dx * 2, .4),
+          width: 4.4,
+          height: 1.8,
+        ),
         const Radius.circular(.9),
       ),
       Paint()..color = _dark,
@@ -137,18 +159,31 @@ void _cloak(Canvas c, Facing f) {
   c.drawCircle(hood, 6.2, Paint()..color = f.front ? _ink : _mid);
   if (f.front) {
     c.drawOval(
-      Rect.fromCenter(center: hood + Offset(f.dx * 1.8, .9), width: 5.2, height: 6.2),
+      Rect.fromCenter(
+        center: hood + Offset(f.dx * 1.8, .9),
+        width: 5.2,
+        height: 6.2,
+      ),
       Paint()..color = _dark,
     );
-    c.drawLine(Offset(f.dx * 1.5, -22), Offset(f.dx * 2.4, -6),
-        Paint()
-          ..color = const Color(0xFFC9C5BC)
-          ..strokeWidth = .8);
+    c.drawLine(
+      Offset(f.dx * 1.5, -22),
+      Offset(f.dx * 2.4, -6),
+      Paint()
+        ..color = const Color(0xFFC9C5BC)
+        ..strokeWidth = .8,
+    );
   }
 }
 
 void _block(Canvas c, Facing f) {
-  void cube(double cx, double baseY, double half, double h, {bool eyes = false}) {
+  void cube(
+    double cx,
+    double baseY,
+    double half,
+    double h, {
+    bool eyes = false,
+  }) {
     final q = half / 2;
     Offset p(double x, double y) => Offset(cx + x, baseY + y);
     final top = [p(0, -h - q), p(half, -h), p(0, -h + q), p(-half, -h)];
@@ -163,7 +198,10 @@ void _block(Canvas c, Facing f) {
       final s = f.dx;
       final eye = Paint()..color = _dark;
       for (final k in [.3, .7]) {
-        final base = Offset(cx + s * half * k, baseY - h * .55 + q * (s > 0 ? 1 - k : 1 - k));
+        final base = Offset(
+          cx + s * half * k,
+          baseY - h * .55 + q * (s > 0 ? 1 - k : 1 - k),
+        );
         c.drawRect(Rect.fromCenter(center: base, width: 1.4, height: 2.2), eye);
       }
     }
@@ -174,6 +212,9 @@ void _block(Canvas c, Facing f) {
 }
 
 /// Which design the game uses: `--dart-define=CHARACTER=cloak|block`.
-final CharacterStyle activeCharacter = CharacterStyle.values.asNameMap()[
-        const String.fromEnvironment('CHARACTER', defaultValue: 'pill')] ??
+final CharacterStyle activeCharacter =
+    CharacterStyle.values.asNameMap()[const String.fromEnvironment(
+      'CHARACTER',
+      defaultValue: 'pill',
+    )] ??
     CharacterStyle.pill;

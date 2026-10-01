@@ -4,6 +4,7 @@ import 'package:dont_trust_the_game/main.dart';
 import 'package:dont_trust_the_game/screens/game_screen.dart';
 import 'package:dont_trust_the_game/settings.dart';
 import 'package:dont_trust_the_game/widgets/common.dart';
+import 'package:dont_trust_the_game/widgets/analog_stick.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -61,18 +62,22 @@ void main() {
   testWidgets('buttons click', (tester) async {
     final a = RecordingAudio();
     var taps = 0;
-    await tester.pumpWidget(AudioScope(
-      audio: a,
-      child: MaterialApp(
-        home: Scaffold(
-          body: Column(children: [
-            BlockButton('[ GO ]', onTap: () => taps++),
-            HudButton('[ II ]', onTap: () => taps++),
-            const BlockButton('[ OFF ]', onTap: null),
-          ]),
+    await tester.pumpWidget(
+      AudioScope(
+        audio: a,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                BlockButton('[ GO ]', onTap: () => taps++),
+                HudButton('[ II ]', onTap: () => taps++),
+                const BlockButton('[ OFF ]', onTap: null),
+              ],
+            ),
+          ),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text('[ GO ]'));
     await tester.tap(find.text('[ II ]'));
     await tester.tap(find.text('[ OFF ]'));
@@ -80,7 +85,32 @@ void main() {
     expect(a.played, [Sfx.click, Sfx.click]);
   });
 
-  testWidgets('menu lullaby, quiet boot with ticks, game, back to menu', (tester) async {
+  testWidgets('analog stick sends a direction and clears it on release', (
+    tester,
+  ) async {
+    final values = <Offset>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(child: AnalogStick(onChanged: values.add)),
+        ),
+      ),
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(AnalogStick)),
+    );
+    await gesture.moveBy(const Offset(24, 0));
+    await tester.pump();
+    expect(values.last.dx, greaterThan(0));
+    await gesture.up();
+    await tester.pump();
+    expect(values.last, Offset.zero);
+  });
+
+  testWidgets('menu lullaby, quiet boot with ticks, game, back to menu', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final settings = await SettingsStore.load();
     final a = RecordingAudio();
@@ -118,10 +148,16 @@ void main() {
     expect(left, containsAllInOrder(['mood trust', 'uncover', 'duck false']));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(GameScreen), findsNothing);
-    expect(a.calls.sublist(a.calls.lastIndexOf('duck true')), left, reason: 'said once');
+    expect(
+      a.calls.sublist(a.calls.lastIndexOf('duck true')),
+      left,
+      reason: 'said once',
+    );
   });
 
-  testWidgets('backing out of the boot screen brings the lullaby back', (tester) async {
+  testWidgets('backing out of the boot screen brings the lullaby back', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final settings = await SettingsStore.load();
     final a = RecordingAudio();

@@ -33,11 +33,17 @@ class RecordingAudio implements GameAudio {
   @override
   void tapeStop() => calls.add('tapeStop');
   @override
-  void hiccup({required bool heavy}) => calls.add('hiccup ${heavy ? 'heavy' : 'light'}');
+  void hiccup({required bool heavy}) =>
+      calls.add('hiccup ${heavy ? 'heavy' : 'light'}');
   @override
   void cover(Duration fade) => calls.add('cover ${fade.inMilliseconds}');
   @override
   void uncover() => calls.add('uncover');
   @override
   void duck(bool on) => calls.add('duck $on');
+  @override
+  void reset() {
+    calls.add('reset');
+    _current = null;
+  }
 }

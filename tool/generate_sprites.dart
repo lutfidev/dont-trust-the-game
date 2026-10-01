@@ -33,16 +33,23 @@ void main() {
           for (var k = 0; k < pose.frames; k++, col++) {
             c
               ..save()
-              ..translate(col * fw + frameAnchor.dx * scale, row * fh + frameAnchor.dy * scale)
+              ..translate(
+                col * fw + frameAnchor.dx * scale,
+                row * fh + frameAnchor.dy * scale,
+              )
               ..scale(scale);
             paintCharacter(c, style, f, pose, k / pose.frames);
             c.restore();
           }
         }
       }
-      final img = await rec.endRecording().toImage((cols * fw).round(), (4 * fh).round());
+      final img = await rec.endRecording().toImage(
+        (cols * fw).round(),
+        (4 * fh).round(),
+      );
       final png = await img.toByteData(format: ui.ImageByteFormat.png);
-      File('$outDir/player_${style.name}.png').writeAsBytesSync(png!.buffer.asUint8List());
+      File('$outDir/player_${style.name}.png')
+          .writeAsBytesSync(png!.buffer.asUint8List());
     }
 
     var start = 0;
@@ -60,9 +67,12 @@ void main() {
             'frameMs': pose.frameMs,
           },
       },
-      'sheets': {for (final s in CharacterStyle.values) s.name: 'player_${s.name}.png'},
+      'sheets': {
+        for (final s in CharacterStyle.values) s.name: 'player_${s.name}.png',
+      },
     };
-    File('$outDir/player.json')
-        .writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(atlas)}\n');
+    File('$outDir/player.json').writeAsStringSync(
+      '${const JsonEncoder.withIndent('  ').convert(atlas)}\n',
+    );
   });
 }

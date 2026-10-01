@@ -40,9 +40,9 @@ function (see *Architecture*). Key D major, music box + pad unless noted.
 | `silence` | — | boot; after "I LIED." while `[ CONTINUE ]` is shown | nothing |
 | `trust` | `music/trust.ogg` | main menu, 01, 02 before the lie, ending TRUST | 72 BPM, 8 bars (~26.7 s). Clean lullaby. Once per loop (bar 6) one note sags ~40 cents and recovers — the only musical clue, like the scrawled "don't". |
 | `lie` | `music/lie.ogg` | 02 after `[ CONTINUE ]` ("DON'T GO THERE.") | Same song, same length. Music box detuned against itself (sour chorus), the last note of each phrase a semitone wrong, pad pitch wobbles slowly, darker filter. |
-| `broken` | `music/broken.ogg` | 03 UI GLITCH | Same tempo. Melody fragments bitcrushed and stuttered, seeded dropouts, dissonant drone (D–E♭–A) with sub, faint digital noise bed. |
-| `watching` | `music/watching.ogg` | 04 WATCHING | 60 BPM, 8 bars (~32 s). The room-01 song slower and lower with ~40% of the notes missing (it's listening), a soft low "lub-dub" pulse, a faint high tone swelling in and out. |
-| `room` | `music/room.ogg` | 05 TRUTH and the choice | No music: ~16 s room-tone loop (low hum partials + filtered brown noise, slow breathing amplitude). |
+| `broken` | `music/broken.ogg` | 03 UI GLITCH; Archive (06–08); Tower/Core routes (12–15) | Same tempo. Melody fragments bitcrushed and stuttered, seeded dropouts, dissonant drone (D–E♭–A) with sub, faint digital noise bed. |
+| `watching` | `music/watching.ogg` | 04 WATCHING; Greenhouse (09–11) | 60 BPM, 8 bars (~32 s). The room-01 song slower and lower with ~40% of the notes missing (it's listening), a soft low "lub-dub" pulse, a faint high tone swelling in and out. |
+| `room` | `music/room.ogg` | 05 TRUTH checkpoint; final choice after 15 | No music: ~16 s room-tone loop (low hum partials + filtered brown noise, slow breathing amplitude). |
 | `exit` | `music/exit.ogg` | ending DON'T TRUST | ~16 s loop: open-air wind (modulated band-passed noise, gusts) and a distant open fifth (D–A). |
 | `truthEnd` | `music/true.ogg` (one-shot) | ending TRUE | Current audio fades out; ~1.5 s of silence; then one pure, consonant D-major(add9) chord blooms (~14 s, sine/triangle, no detune, no noise) and fades to silence. The first sound that isn't trying to control you. |
 
@@ -92,14 +92,14 @@ play so repeats don't sound identical.
 | `doorOpen` | door opens (03); ending DON'T TRUST | latch click, short creak, air | — |
 | `drawerOpen` | drawer opens after the correct code | wooden slide + stop thud | — |
 | `key` | key picked up | small metallic jingle | — |
-| `crack` | player reaches the crack (04 → 05) | low rumble + crumbling grains | — |
+| `crack` | player reaches the crack (04 → 05, 05 → 06) | low rumble + crumbling grains | — |
 | `dial` | puzzle dial ▲ / ▼ | mechanical tick (rate 1.08 up / 0.94 down) | 30 |
 | `wrong` | UNLOCK with a wrong code | two short low buzzes | — |
 | `wrongLied` | UNLOCK with the told code 1-2-3-4 | same buzz, distorted and detuned | — |
 | `unlock` | UNLOCK with the real code | latch clack + small bright chime | — |
 | `glitchLight` | natural light glitch burst | ~120 ms digital crackle | 900 / ±12% |
 | `glitchHeavy` | natural heavy glitch burst (03) | ~250 ms stutter | 900 / ±12% |
-| `tear` | tear transition starts (02 → 03) | static rip rising to a hard cut at full cover (~380 ms) | — |
+| `tear` | tear transition starts (02 → 03, 05 → 06) | static rip rising to a hard cut at full cover (~380 ms) | — |
 | `tearOpen` | tear transition reveal starts | reversed rip (~300 ms) | — |
 | `light` | light transition starts (03 → 04, 04 → 05) | rising sweep into a bright shimmer, a soft "white" hum under the card, fading out (~1.7 s) | — |
 | `fade` | any transition with REDUCE GLITCH on | soft low whoosh (~0.6 s), no rip | — |
@@ -188,7 +188,7 @@ play so repeats don't sound identical.
 - `GameController(settings, {..., GameAudio audio = const SilentAudio()})`.
 - `Mood get mood` — pure mapping, unit-tested:
   - overlay `endTrust` → `trust`, `endDont` → `exit`, `endTrue` → `truthEnd`;
-  - stage 5 → `room`; 4 → `watching`; 3 → `broken`;
+  - stage 5 → `room`; 09–11 → `watching`; 06–08 and 12–15 → `broken`; 4 → `watching`; 3 → `broken`;
   - stage 2 after the lie → `silence` while `continuePrompt`, else `lie`;
   - otherwise `trust`.
 - `_syncMusic()` calls `audio.mood(mood)`; called from `_syncRoom()`,

@@ -24,10 +24,13 @@ void main() {
     clock = 0;
   });
 
-  AudioDirector director() => AudioDirector(fake, settings,
-      random: math.Random(0),
-      now: () => clock,
-      schedule: (d, run) => scheduled.add((d, run)));
+  AudioDirector director() => AudioDirector(
+    fake,
+    settings,
+    random: math.Random(0),
+    now: () => clock,
+    schedule: (d, run) => scheduled.add((d, run)),
+  );
 
   Future<AudioDirector> ready([Mood mood = Mood.trust]) async {
     final d = director()..mood(mood);
@@ -36,20 +39,23 @@ void main() {
     return d;
   }
 
-  test('nothing plays before the engine is ready; then the wanted mood starts', () async {
-    final d = director()
-      ..mood(Mood.trust)
-      ..play(Sfx.click);
-    expect(fake.log, isEmpty);
-    await d.start();
-    expect(d.ready, isTrue);
-    expect(fake.log, [
-      'init',
-      'bus music 0.25 sfx 0.50', // defaults MUSIC 6, SFX 8
-      'start trust 0.00 #1',
-      'fade #1 1.00 2500',
-    ]);
-  });
+  test(
+    'nothing plays before the engine is ready; then the wanted mood starts',
+    () async {
+      final d = director()
+        ..mood(Mood.trust)
+        ..play(Sfx.click);
+      expect(fake.log, isEmpty);
+      await d.start();
+      expect(d.ready, isTrue);
+      expect(fake.log, [
+        'init',
+        'bus music 0.25 sfx 0.50', // defaults MUSIC 6, SFX 8
+        'start trust 0.00 #1',
+        'fade #1 1.00 2500',
+      ]);
+    },
+  );
 
   test('an engine that fails to start leaves the game silent', () async {
     fake.failInit = true;
@@ -74,7 +80,9 @@ void main() {
     d
       ..play(Sfx.click)
       ..hiccup(heavy: true)
-      ..mood(Mood.lie) // the old voice can't be stopped, the new one can't start
+      ..mood(
+        Mood.lie,
+      ) // the old voice can't be stopped, the new one can't start
       ..tapeStop()
       ..cover(const Duration(milliseconds: 380))
       ..uncover()
@@ -94,24 +102,36 @@ void main() {
     d.mood(Mood.trust);
     expect(fake.log, isEmpty);
     d.mood(Mood.lie);
-    expect(fake.log, ['fade #1 0.00 1200', 'stop #1 1200', 'start lie 0.00 #2', 'fade #2 1.00 1800']);
+    expect(fake.log, [
+      'fade #1 0.00 1200',
+      'stop #1 1200',
+      'start lie 0.00 #2',
+      'fade #2 1.00 1800',
+    ]);
     fake.log.clear();
     d.mood(Mood.trust, cut: true);
     expect(fake.log, ['stop #2 0', 'start trust 1.00 #3']);
   });
 
-  test('the tape-stop halts the music; the silence that follows is a no-op', () async {
-    final d = await ready();
-    d.tapeStop();
-    expect(fake.log, ['fadespeed #1 0.05 900', 'fade #1 0.00 1000', 'stop #1 1000']);
-    fake.log.clear();
-    d
-      ..mood(Mood.silence)
-      ..hiccup(heavy: true); // nothing playing to stumble
-    expect(fake.log, isEmpty);
-    d.mood(Mood.lie);
-    expect(fake.log, ['start lie 0.00 #2', 'fade #2 1.00 1800']);
-  });
+  test(
+    'the tape-stop halts the music; the silence that follows is a no-op',
+    () async {
+      final d = await ready();
+      d.tapeStop();
+      expect(fake.log, [
+        'fadespeed #1 0.05 900',
+        'fade #1 0.00 1000',
+        'stop #1 1000',
+      ]);
+      fake.log.clear();
+      d
+        ..mood(Mood.silence)
+        ..hiccup(heavy: true); // nothing playing to stumble
+      expect(fake.log, isEmpty);
+      d.mood(Mood.lie);
+      expect(fake.log, ['start lie 0.00 #2', 'fade #2 1.00 1800']);
+    },
+  );
 
   test('a glitch hiccup jolts the play speed and eases back', () async {
     final d = await ready(Mood.broken);
@@ -136,16 +156,21 @@ void main() {
     expect(fake.log, ['start broken 0.00 #2', 'fade #2 1.00 400']);
   });
 
-  test('leaving for the menu mid-transition still starts the lullaby', () async {
-    final d = await ready(Mood.broken);
-    d
-      ..cover(const Duration(milliseconds: 450))
-      ..mood(Mood.watching) // stage swapped under cover
-      ..mood(Mood.trust) // back to the menu
-      ..uncover();
-    expect(fake.log.last, 'fade #2 1.00 2500');
-    expect(fake.log, contains('start trust 0.00 #2'));
-  });
+  test(
+    'leaving for the menu mid-transition still starts the lullaby',
+    () async {
+      final d = await ready(Mood.broken);
+      d
+        ..cover(const Duration(milliseconds: 450))
+        ..mood(Mood.watching) // stage swapped under cover
+        ..cover(Duration.zero) // leaving during the reveal
+        ..mood(Mood.trust) // back to the menu
+        ..uncover();
+      expect(fake.log.last, 'fade #2 1.00 2500');
+      expect(fake.log, contains('start trust 0.00 #2'));
+      expect(fake.log.where((l) => l.startsWith('start watching')), isEmpty);
+    },
+  );
 
   test('the true ending fades out, waits, then plays its chord once', () async {
     final d = await ready(Mood.room);
@@ -157,13 +182,45 @@ void main() {
     expect(fake.log.last, 'start truthEnd 1.00 #2');
   });
 
-  test('a stale true-ending start is ignored after the mood moved on', () async {
+  test(
+    'a stale true-ending start is ignored after the mood moved on',
+    () async {
+      final d = await ready(Mood.room);
+      d
+        ..mood(Mood.truthEnd)
+        ..mood(Mood.trust);
+      scheduled.single.$2();
+      expect(fake.log.where((l) => l.startsWith('start truthEnd')), isEmpty);
+    },
+  );
+
+  test('reset clears transient state and invalidates delayed music', () async {
     final d = await ready(Mood.room);
-    d
-      ..mood(Mood.truthEnd)
-      ..mood(Mood.trust);
+    d.mood(Mood.truthEnd);
+    d.duck(true);
+    d.play(Sfx.click);
+
+    d.reset();
+    d.mood(Mood.trust);
+    final callsAfterRestart = fake.log.length;
     scheduled.single.$2();
+    d.play(Sfx.click);
+
+    expect(fake.log.length, callsAfterRestart + 1);
+    expect(fake.log.last, startsWith('sfx click '));
     expect(fake.log.where((l) => l.startsWith('start truthEnd')), isEmpty);
+    expect(fake.log.where((l) => l.startsWith('start trust')), hasLength(1));
+    expect(fake.log, contains('bus music 0.25 sfx 0.50'));
+  });
+
+  test('reset releases a transition cover', () async {
+    final d = await ready(Mood.broken);
+    d
+      ..cover(Duration.zero)
+      ..reset()
+      ..mood(Mood.trust);
+
+    expect(fake.log, contains('start trust 0.00 #2'));
   });
 
   test('cooldowns drop fast repeats; vary stays in range', () async {
@@ -217,33 +274,47 @@ void main() {
 
   test('spamming a button does not stack its sound', () async {
     final d = await ready();
-    for (final s in [Sfx.wrong, Sfx.wrongLied, Sfx.doorLocked, Sfx.voice, Sfx.pause, Sfx.resume]) {
+    for (final s in [
+      Sfx.wrong,
+      Sfx.wrongLied,
+      Sfx.doorLocked,
+      Sfx.voice,
+      Sfx.pause,
+      Sfx.resume,
+    ]) {
       clock += 5000;
       d.play(s);
       clock += 100;
       d.play(s); // a second tap 100ms later
-      expect(fake.log.where((l) => l.startsWith('sfx ${s.name} ')), hasLength(1), reason: s.name);
+      expect(
+        fake.log.where((l) => l.startsWith('sfx ${s.name} ')),
+        hasLength(1),
+        reason: s.name,
+      );
     }
   });
 
-  test('while the app is hidden, cues stay silent and the mood waits for resume', () async {
-    final d = await ready();
-    await d.suspend();
-    expect(fake.log, ['suspend']);
-    fake.log.clear();
-    d
-      ..play(Sfx.step)
-      ..mood(Mood.lie);
-    expect(fake.log, isEmpty);
-    await d.resume();
-    expect(fake.log, [
-      'resume',
-      'fade #1 0.00 1200',
-      'stop #1 1200',
-      'start lie 0.00 #2',
-      'fade #2 1.00 1800',
-    ]);
-  });
+  test(
+    'while the app is hidden, cues stay silent and the mood waits for resume',
+    () async {
+      final d = await ready();
+      await d.suspend();
+      expect(fake.log, ['suspend']);
+      fake.log.clear();
+      d
+        ..play(Sfx.step)
+        ..mood(Mood.lie);
+      expect(fake.log, isEmpty);
+      await d.resume();
+      expect(fake.log, [
+        'resume',
+        'fade #1 0.00 1200',
+        'stop #1 1200',
+        'start lie 0.00 #2',
+        'fade #2 1.00 1800',
+      ]);
+    },
+  );
 
   test('the true-ending chord waits until the app is back', () async {
     final d = await ready(Mood.room);
@@ -256,12 +327,19 @@ void main() {
     expect(fake.log.last, 'start truthEnd 1.00 #2');
   });
 
-  test('hidden while still loading: the engine is silenced as soon as it is up', () async {
-    final d = director()..mood(Mood.trust);
-    await d.suspend();
-    await d.start();
-    expect(fake.log, ['init', 'bus music 0.25 sfx 0.50', 'suspend']);
-    await d.resume();
-    expect(fake.log.sublist(3), ['resume', 'start trust 0.00 #1', 'fade #1 1.00 2500']);
-  });
+  test(
+    'hidden while still loading: the engine is silenced as soon as it is up',
+    () async {
+      final d = director()..mood(Mood.trust);
+      await d.suspend();
+      await d.start();
+      expect(fake.log, ['init', 'bus music 0.25 sfx 0.50', 'suspend']);
+      await d.resume();
+      expect(fake.log.sublist(3), [
+        'resume',
+        'start trust 0.00 #1',
+        'fade #1 1.00 2500',
+      ]);
+    },
+  );
 }

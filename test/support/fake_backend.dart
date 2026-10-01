@@ -30,7 +30,8 @@ class FakeBackend implements AudioBackend {
   void fadeMusicBus(double to, Duration time) =>
       _call('busfade ${_f(to)} ${time.inMilliseconds}');
   @override
-  void playSfx(Sfx sfx, {required double rate}) => _call('sfx ${sfx.name} ${_f(rate)}');
+  void playSfx(Sfx sfx, {required double rate}) =>
+      _call('sfx ${sfx.name} ${_f(rate)}');
   @override
   int startMusic(Mood mood, {required double volume}) {
     _call('start ${mood.name} ${_f(volume)} #${_ids + 1}');
@@ -46,7 +47,8 @@ class FakeBackend implements AudioBackend {
   void fadeSpeed(int voice, double to, Duration time) =>
       _call('fadespeed #$voice ${_f(to)} ${time.inMilliseconds}');
   @override
-  void stopAfter(int voice, Duration time) => _call('stop #$voice ${time.inMilliseconds}');
+  void stopAfter(int voice, Duration time) =>
+      _call('stop #$voice ${time.inMilliseconds}');
   @override
   Future<void> suspend() async => _call('suspend');
   @override

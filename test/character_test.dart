@@ -17,17 +17,27 @@ void main() {
   });
 
   test('sprite sheets match the atlas', () {
-    final atlas = jsonDecode(File('assets/images/sprites/player.json').readAsStringSync())
-        as Map<String, dynamic>;
+    final atlas = jsonDecode(
+      File('assets/images/sprites/player.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
     final anims = atlas['animations'] as Map<String, dynamic>;
     final cols = anims.values.fold<int>(0, (n, a) => n + (a['frames'] as int));
     final rows = (atlas['rows'] as List).length;
     for (final style in CharacterStyle.values) {
-      final file = (atlas['sheets'] as Map<String, dynamic>)[style.name] as String;
+      final file =
+          (atlas['sheets'] as Map<String, dynamic>)[style.name] as String;
       final png = File('assets/images/sprites/$file').readAsBytesSync();
       final header = ByteData.sublistView(png, 16, 24);
-      expect(header.getUint32(0), cols * (atlas['frameWidth'] as num), reason: file);
-      expect(header.getUint32(4), rows * (atlas['frameHeight'] as num), reason: file);
+      expect(
+        header.getUint32(0),
+        cols * (atlas['frameWidth'] as num),
+        reason: file,
+      );
+      expect(
+        header.getUint32(4),
+        rows * (atlas['frameHeight'] as num),
+        reason: file,
+      );
     }
     expect(atlas['rows'], [for (final f in Facing.values) f.name]);
   });

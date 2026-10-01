@@ -27,21 +27,22 @@ const kMono = 'IBMPlexMono';
 const kSerif = 'InstrumentSerif';
 
 /// Monospace "system" voice. [tracking] is CSS letter-spacing in em.
-TextStyle mono(double size,
-        {Color color = C.ink,
-        double tracking = 0,
-        FontWeight weight = FontWeight.w400,
-        double? height,
-        List<Shadow>? shadows}) =>
-    TextStyle(
-      fontFamily: kMono,
-      fontSize: size,
-      color: color,
-      letterSpacing: size * tracking,
-      fontWeight: weight,
-      height: height,
-      shadows: shadows,
-    );
+TextStyle mono(
+  double size, {
+  Color color = C.ink,
+  double tracking = 0,
+  FontWeight weight = FontWeight.w400,
+  double? height,
+  List<Shadow>? shadows,
+}) => TextStyle(
+  fontFamily: kMono,
+  fontSize: size,
+  color: color,
+  letterSpacing: size * tracking,
+  fontWeight: weight,
+  height: height,
+  shadows: shadows,
+);
 
 /// Serif italic — "the game's real voice", introduced in stage 04.
 TextStyle serif(double size, {Color color = C.ink, double? height}) =>

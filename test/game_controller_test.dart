@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:dont_trust_the_game/audio/cues.dart';
 import 'package:dont_trust_the_game/game/game_controller.dart';
 import 'package:dont_trust_the_game/game/glitch.dart';
+import 'package:dont_trust_the_game/game/route_challenge.dart';
 import 'package:dont_trust_the_game/room/room_scene.dart';
 import 'package:dont_trust_the_game/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,11 +25,66 @@ void main() {
     }
   }
 
+  void findEchoes(GameController g) {
+    for (final tile in GameController.echoTiles) {
+      g.onTile(tile);
+      run(g, 2500);
+    }
+  }
+
+  void solveRoute(GameController g) {
+    for (final tile in g.routeTargets) {
+      final steps = GameController.path(
+        g.scene.player!,
+        tile,
+        obstacles: g.scene.obstacles,
+      )!.length;
+      g.onTile(tile);
+      run(g, steps * GameController.walkStepMs + 80);
+    }
+  }
+
+  void reachFinalStage(GameController g) {
+    if (g.stage == 5) {
+      g.onCrack();
+      run(g, 2000);
+    }
+    while (g.stage < 15) {
+      solveRoute(g);
+      g.onCrack();
+      run(g, 2000);
+    }
+    solveRoute(g);
+    run(g, 1000);
+  }
+
   test('path avoids the lamp and cabinet tiles', () {
     final p = GameController.path(const Tile(1, 4), const Tile(0, 1))!;
     expect(p.last, const Tile(0, 1));
     expect(p.any((t) => GameController.blocked(t.i, t.j)), isFalse);
     expect(GameController.path(const Tile(1, 4), const Tile(0, 3)), isNull);
+  });
+
+  test('analog input walks along the isometric grid and stops on release', () {
+    final g = GameController(settings, random: math.Random(1));
+    g.setAnalogInput(const Offset(1, .5)); // screen down-right, grid +i
+    run(g, 240);
+    expect(g.scene.player, const Tile(2, 4));
+
+    g.setAnalogInput(Offset.zero);
+    run(g, 500);
+    expect(g.scene.player, const Tile(2, 4));
+  });
+
+  test('pausing clears a held analog direction', () {
+    final g = GameController(settings, random: math.Random(1));
+    g.setAnalogInput(const Offset(1, .5));
+    run(g, 100);
+    g.pause();
+    g.resume();
+    run(g, 500);
+
+    expect(g.scene.player, const Tile(1, 4));
   });
 
   test('full playthrough reaches all three endings', () {
@@ -81,7 +138,7 @@ void main() {
     expect(g.stage, 4);
     expect(g.transition.value, isNull);
     expect(g.glitch.unease, Unease.watching);
-    expect(g.scene.crack, isTrue);
+    expect(g.scene.crack, isFalse);
     run(g, GameController.idleCommentMs + 500);
     expect(g.current.text, 'Why are you not moving?');
     g.pause();
@@ -89,13 +146,21 @@ void main() {
     expect(g.pauses, 1);
     g.resume();
 
-    // 05 TRUTH — through the crack.
+    findEchoes(g);
+    expect(g.scene.crack, isTrue);
+
+    // 05 TRUTH is a checkpoint, not an ending.
     g.onCrack();
     run(g, 5000);
     expect(g.stage, 5);
-    expect(g.glitch.unease, Unease.none);
+    run(g, GameController.truthIdleMs + 500);
+    expect(g.overlay, isNot(GameOverlay.truth));
+
+    // 06–15 — increasingly long routes across four maps.
+    reachFinalStage(g);
+    expect(g.stage, 15);
     expect(g.overlay, GameOverlay.truth);
-    expect(g.scene.wallText, truthWallText);
+    expect(g.mood, Mood.room);
 
     // Doing nothing is the true ending.
     run(g, GameController.truthIdleMs + 500);
@@ -104,15 +169,128 @@ void main() {
   });
 
   test('trusting the game loops back to room 01', () {
-    final g = GameController(settings, startStage: 4);
-    g.onCrack();
-    run(g, 5000);
+    final g = GameController(settings, startStage: 5);
+    g.choose(GameOverlay.endTrust);
+    expect(g.overlay, GameOverlay.none, reason: 'Truth is a checkpoint');
+    reachFinalStage(g);
     g.choose(GameOverlay.endTrust);
     expect(g.overlay, GameOverlay.endTrust);
     run(g, GameController.trustLoopMs + 100);
     expect(g.stage, 1);
     expect(g.overlay, GameOverlay.none);
     expect(g.current.text, 'MOVE RIGHT.');
+  });
+
+  test('stage 05 truth checkpoint continues instead of ending on idle', () {
+    final g = GameController(settings, startStage: 5);
+    run(g, GameController.truthIdleMs + 500);
+    expect(g.stage, 5);
+    expect(g.overlay, GameOverlay.none);
+    expect(g.scene.secret, isTrue);
+
+    g.onCrack();
+    run(g, 2000);
+    expect(g.stage, 6);
+    expect(g.routeTargets, isNotEmpty);
+  });
+
+  test('all route stages rise in length and timed pressure', () {
+    final g = GameController(settings, startStage: 6);
+    final firstLength = g.routeTotal;
+    for (var stage = 6; stage <= 15; stage++) {
+      expect(g.stage, stage);
+      if (stage < 12) {
+        expect(g.routeSecondsRemaining, 0);
+      } else {
+        expect(g.routeSecondsRemaining, greaterThan(0));
+      }
+      solveRoute(g);
+      if (stage < 15) {
+        expect(g.scene.crack, isTrue);
+        g.onCrack();
+        run(g, 2000);
+      }
+    }
+    run(g, 1000);
+    expect(g.routeTotal, greaterThan(firstLength));
+    expect(g.overlay, GameOverlay.truth);
+  });
+
+  test('each route target and exit is reachable around map obstacles', () {
+    for (final challenge in RouteChallenge.all) {
+      var position = const Tile(1, 4);
+      for (final target in challenge.route) {
+        final path = GameController.path(
+          position,
+          target,
+          obstacles: challenge.obstacles,
+        );
+        expect(path, isNotNull, reason: 'stage ${challenge.stage}: $target');
+        position = target;
+      }
+      expect(
+        GameController.path(
+          position,
+          GameController.routeExitTile,
+          obstacles: challenge.obstacles,
+        ),
+        isNotNull,
+        reason: 'stage ${challenge.stage} exit',
+      );
+    }
+  });
+
+  test('a wrong route marker resets the sequence and costs time', () {
+    final g = GameController(settings, startStage: 12);
+    final before = g.routeSecondsRemaining;
+    g.onTile(g.routeTargets.first);
+    run(g, 220);
+    expect(g.routeProgress, 1);
+    g.onTile(g.routeTargets[3]);
+    run(g, GameController.walkStepMs + 80);
+    expect(g.routeProgress, 0);
+    expect(g.routeSecondsRemaining, lessThan(before));
+  });
+
+  test('ending choices are ignored until stage 15 is solved', () {
+    final g = GameController(settings, startStage: 5);
+    g.choose(GameOverlay.endDont);
+    expect(g.overlay, GameOverlay.none);
+    reachFinalStage(g);
+    g.choose(GameOverlay.endDont);
+    expect(g.overlay, GameOverlay.endDont);
+  });
+
+  test('stage 04 crack opens only after all three echoes are found', () {
+    final g = GameController(settings, startStage: 4);
+    expect(g.scene.crack, isFalse);
+    expect(g.scene.highlights, hasLength(GameController.echoTiles.length));
+
+    g.onCrack();
+    expect(g.transition.value, isNull);
+
+    for (final (index, tile) in GameController.echoTiles.indexed) {
+      g.onTile(tile);
+      run(g, 2500);
+      expect(g.echoesFound, index + 1);
+      expect(g.scene.crack, index == GameController.echoTiles.length - 1);
+    }
+
+    g.onCrack();
+    expect(g.transition.value, isNotNull);
+  });
+
+  test('direct stage start initializes route and map obstacle state', () {
+    final first = GameController(settings, startStage: 6);
+    expect(first.stage, 6);
+    expect(first.routeTargets, isNotEmpty);
+    expect(first.scene.map, RoomMap.archive);
+    expect(first.current.text, RouteChallenge.at(6).instruction);
+
+    final late = GameController(settings, startStage: 15);
+    expect(late.stage, 15);
+    expect(late.scene.map, RoomMap.core);
+    expect(late.scene.obstacles, isNotEmpty);
   });
 
   test('stage 04 notices the player always going left', () {
@@ -196,16 +374,19 @@ void main() {
     expect(d.scramble('OPEN THE DOOR.'), 'OPEN THE DOOR.');
   });
 
-  test('the controller follows the setting and the OS reduce-motion flag', () async {
-    final g = GameController(settings, startStage: 3, random: math.Random(5));
-    g.tick(16);
-    expect(g.glitch.reduced, isFalse);
-    settings.toggleReduceGlitch();
-    g.tick(16);
-    expect(g.glitch.reduced, isTrue);
-    settings.toggleReduceGlitch();
-    g.systemReduceMotion = true;
-    g.tick(16);
-    expect(g.glitch.reduced, isTrue);
-  });
+  test(
+    'the controller follows the setting and the OS reduce-motion flag',
+    () async {
+      final g = GameController(settings, startStage: 3, random: math.Random(5));
+      g.tick(16);
+      expect(g.glitch.reduced, isFalse);
+      settings.toggleReduceGlitch();
+      g.tick(16);
+      expect(g.glitch.reduced, isTrue);
+      settings.toggleReduceGlitch();
+      g.systemReduceMotion = true;
+      g.tick(16);
+      expect(g.glitch.reduced, isTrue);
+    },
+  );
 }
